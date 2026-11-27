@@ -95,7 +95,26 @@ def bandwidth(t, name):
     title(ax, t, "Plain decode uses 66% of the memory bandwidth", "Qwen3.8 27B reads 14.45 GB per step. Apple's spec: 1.2 TB/s.")
     f.tight_layout(); f.savefig(name, facecolor=t["surface"]); plt.close(f)
 
+def models(t, name):
+    labels = ["Gemma 4 31B", "Qwen3.8 27B", "Qwen3.6 35B-A3B\n(MoE)"]
+    off = [80.1, 100.2, 200.0]; best = [91.6, 117.7, 244.9]
+    gains = ["+14%", "+18%", "+22%"]
+    f, ax = fig(t)
+    w = 0.36
+    ax.bar([x - w / 2 - 0.01 for x in range(3)], off, width=w, color=t["series"][0], label="Official Ollama build", zorder=3)
+    ax.bar([x + w / 2 + 0.01 for x in range(3)], best, width=w, color=t["series"][1], label="Our uniform int4 build", zorder=3)
+    for x, (v, g) in enumerate(zip(best, gains)):
+        ax.text(x + w / 2 + 0.01, v + 4, g, ha="center", color=t["text"], fontsize=9, fontweight="bold")
+    ax.set_xticks(range(3), labels, color=t["text"], fontsize=9)
+    ax.set_ylabel("tok/s, average of prose, code, chat", color=t["text2"])
+    ax.set_ylim(0, 275)
+    leg = ax.legend(frameon=False, loc="upper left", fontsize=9)
+    for tx in leg.get_texts(): tx.set_color(t["text"])
+    title(ax, t, "One lever, three model families", "Uniform int4 (Gemma from Google's QAT weights; Qwen3.8 with a DFlash2 draft). One stream, temperature 0.")
+    f.tight_layout(); f.savefig(name, facecolor=t["surface"]); plt.close(f)
+
 for mode, t in THEMES.items():
+    models(t, f"charts/models-{mode}.svg")
     decode(t, f"charts/decode-{mode}.svg")
     rows(t, f"charts/rows-{mode}.svg")
     parallel(t, f"charts/parallel-{mode}.svg")

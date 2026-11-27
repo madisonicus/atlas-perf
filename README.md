@@ -15,6 +15,11 @@ the same lever gives **+22%** (245 tok/s), with a possible quality cost
 still under test.
 
 <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/models-dark.svg">
+  <img alt="Grouped bars: official vs uniform int4 builds. Gemma 4 31B 80 to 92 tok/s (+14%), Qwen3.8 27B 100 to 118 (+18%), Qwen3.6 35B-A3B 200 to 245 (+22%)." src="charts/models-light.svg" width="760">
+</picture>
+
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/decode-dark.svg">
   <img alt="Grouped bar chart: decode tok/s for prose, code and chat across four builds of Qwen3.8 27B; the best build reaches 167 tok/s on code against 122 for the official build." src="charts/decode-light.svg" width="760">
 </picture>
