@@ -1,0 +1,84 @@
+From 9e020f19200365aff5fc054117807db5a0ecf4a7 Mon Sep 17 00:00:00 2001
+From: piargus <piargus@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 13:01:16 -0500
+Subject: [PATCH] mlxrunner: snapshot at the start of the last chat turns
+
+---
+ mlxrunner/pipeline.go       |  6 +++---
+ mlxrunner/turn_snapshots.go | 40 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 43 insertions(+), 3 deletions(-)
+ create mode 100644 mlxrunner/turn_snapshots.go
+
+diff --git a/mlxrunner/pipeline.go b/mlxrunner/pipeline.go
+index b6a7233..62e7e05 100644
+--- a/mlxrunner/pipeline.go
++++ b/mlxrunner/pipeline.go
+@@ -92,8 +92,8 @@ func prefillSnapshotOffsets(length int) []int {
+ 
+ // A longer prompt can reuse states at unchanged prefill widths. Keep the
+ // last full batch in addition to the usual periodic and terminal captures.
+-func (s *cacheSession) scheduleGenerationSnapshots() {
+-	offsets := prefillSnapshotOffsets(len(s.inputs))
++func (s *cacheSession) scheduleGenerationSnapshots(extra ...int) {
++	offsets := append(prefillSnapshotOffsets(len(s.inputs)), extra...)
+ 	for i := len(s.prefill) - 1; i >= 0; i-- {
+ 		start := 0
+ 		if i > 0 {
+@@ -202,7 +202,7 @@ func (r *Runner) newPrefill(session *cacheSession, spec *speculationSession, med
+ 	// Request periodic snapshots during prefill and near the end of the
+ 	// prompt so that long prompts can be partially restored and
+ 	// thinking/generation can be retried without full reprocessing.
+-	session.scheduleGenerationSnapshots()
++	session.scheduleGenerationSnapshots(r.turnStartOffsets(session.inputs)...)
+ 	// Free restored items' buffers now: on a full cache hit the loop never runs.
+ 	media.free(p.position)
+ 	return p
+diff --git a/mlxrunner/turn_snapshots.go b/mlxrunner/turn_snapshots.go
+new file mode 100644
+index 0000000..1f14fc2
+--- /dev/null
++++ b/mlxrunner/turn_snapshots.go
+@@ -0,0 +1,40 @@
++package mlxrunner
++
++import (
++	"os"
++	"sync"
++)
++
++// turnSnapshots is OLLAMA_MLX_TURN_SNAPSHOTS=1: also snapshot at the start of
++// the last two chat turns. A follow-up in a chat client changes the previous
++// user message (a date stamp, an attachment) or appends after it, so its
++// prompt diverges inside the last turns. Without a saved state there, a
++// hybrid model restores to the last 8192-token mark and reads up to 8k
++// tokens again (12.5 s on a 139k chat, M5 Ultra, 2026-11-27).
++var turnSnapshots = os.Getenv("OLLAMA_MLX_TURN_SNAPSHOTS") == "1"
++
++var (
++	turnMarkerOnce sync.Once
++	turnMarkers    map[int32]bool
++)
++
++func (r *Runner) turnStartOffsets(inputs []int32) []int {
++	if !turnSnapshots || r.Tokenizer == nil {
++		return nil
++	}
++	turnMarkerOnce.Do(func() {
++		turnMarkers = map[int32]bool{}
++		for _, s := range []string{"<|im_start|>", "<start_of_turn>", "<|turn>"} {
++			if ids := r.Tokenizer.Encode(s, false); len(ids) == 1 {
++				turnMarkers[ids[0]] = true
++			}
++		}
++	})
++	var out []int
++	for i := len(inputs) - 1; i > 0 && len(out) < 3; i-- {
++		if turnMarkers[inputs[i]] {
++			out = append(out, i)
++		}
++	}
++	return out
++}
+-- 
+2.54.0 (Apple Git-157)
+

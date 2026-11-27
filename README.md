@@ -98,6 +98,7 @@ and chat.
 | 2026-11-27 | Row padding variants with the 48k draft head: none, 3→4 only (`OLLAMA_MLX_PAD_ROWS=3`), 2–3→4 | avg 113.7 / 113.6 / 115.5 tok/s | all inside the ±2% run-to-run spread of this test |
 | 2026-11-27 | Draft second choice at a rejection, 6 varied prompts per kind (`OLLAMA_MLX_ALT_STATS=1`, `bench/alt.py`) | at the first draft position the target token was the draft's second choice in **53% (prose) and 44% (chat)** of rejections; 39% and 35% over all positions | the target token after a first-position rejection is already free, so a second branch gains only the token after it: about +0.11 tokens per round on prose (21% of rounds reject at position 1, times 53%), near +4%. Small for the work a forked recurrent state needs. A better-trained draft is the larger lever |
 | 2026-11-27 | Self-distill the MTP head (`mtp/`): 740 of the target's own greedy chat answers (UltraChat prompts, ~300k tokens), labels = the 4-bit target's argmax, fp32 AdamW, 2 epochs, lr 1e-6 | held-out step-1 agreement **80.66% → 80.79%** (loss 0.653 → 0.630); train loss fell to ~0.42. lr 2e-5 and 3e-6 on smaller data made it worse (72%, 81.3% from 82.1%) | negative at this scale: Qwen's head already fits the model's own chat output, and the small gain does not pay for a new package. Draft quality needs a different idea (a larger or tree draft), not a fine-tune |
+| 2026-11-27 | **Follow-up turn, chat client flow** (history unchanged except the date stamp leaves the previous user message), Qwen3.8 27B int4u, `bench/turns_ab.py`. Stock vs patch 0006 (`OLLAMA_MLX_TURN_SNAPSHOTS=1`: also save state at the start of the last chat turns) | first word at 3.6k / 10k / 21k / 42k / 70k / 139k tokens: stock **2.02 / 1.45 / 3.13 / 0.73 / 4.21 / 12.5 s**; patched **0.11 / 0.12 / 0.15 / 0.19 / 0.25 / 0.46 s** | a hybrid model cannot rewind its recurrent state, so a prompt that diverges inside the previous turn restores to the last 8192-token mark (or 0) and reads the rest again. This was the "131,071 stop": not a 2^17 limit, only the 16th mark. 10–30x faster follow-ups |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
@@ -171,7 +172,7 @@ Drafts of the issues we plan to file are in `upstream/`.
 - MLX: no fast fp4 kernel for 2–5 rows on NAX GPUs (`use_qmv_mma` min_rows 6);
   affine has one from 4 rows (#4787, #4827). A fp port for 2–5 rows would
   speed up MTP verification and batched decode.
-- Ollama: prefix cache restore stops at 131,072 tokens; no disk paging; no KV
+- Ollama: (solved, patch 0006) follow-ups re-read up to 8k tokens because the prefix cache saves recurrent state only every 8192 tokens; no disk paging; no KV
   quantization on MLX; no request priority.
 
 ## Charts

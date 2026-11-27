@@ -10,11 +10,15 @@ served from cache, and seconds to first word, for a cold start and a follow-up.
 """
 import json, random, sys, time, urllib.request
 MODEL = sys.argv[1] if len(sys.argv) > 1 else "qwen3.8:27b-nvfp4"
-URL = "http://127.0.0.1:11434/api/chat"
+import os; URL = os.environ.get("TTFT_URL", "http://127.0.0.1:11434/api/chat")
 
 def chat(msgs):
     body = {"model": MODEL, "stream": False, "think": False, "messages": msgs, "options": {"num_predict": 60, "temperature": 0}}
-    r = json.load(urllib.request.urlopen(urllib.request.Request(URL, json.dumps(body).encode(), {"Content-Type": "application/json"}), timeout=900))
+    import urllib.error
+    try:
+        r = json.load(urllib.request.urlopen(urllib.request.Request(URL, json.dumps(body).encode(), {"Content-Type": "application/json"}), timeout=900))
+    except urllib.error.HTTPError as e:
+        raise SystemExit("HTTP %s: %s" % (e.code, e.read()[:400]))
     ttft = (r.get("load_duration", 0) + r["prompt_eval_duration"]) / 1e9
     return r, ttft
 
