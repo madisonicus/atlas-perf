@@ -2,7 +2,7 @@
 
 Faster local LLM inference on one Mac Studio (Apple M5 Ultra, 96 GB, 1.2 TB/s),
 by patching the open-source stack (Ollama 0.40.18 and its MLX runner) and
-measuring every change. Started 2026-11-26. Meant to move to its own repo.
+measuring every change. Started 2026-11-26.
 
 **Goal:** cut the time from send to last word in half against the Phase 0
 baseline, with no quality loss, and offer each patch that helps upstream.
@@ -31,6 +31,11 @@ prose, code, chat), from 99.7 tok/s.
 | 2026-11-27 | Padding alone (int4) | 109.9 vs 105.1 (+4.6%) | |
 | 2026-11-27 | Fused output gates (qwen3.5) | 109.6 vs 109.1 (+0.5%) | patch 0002, `OLLAMA_MLX_FUSE=1`; kept |
 | 2026-11-27 | Quality, uniform int4 | 20/20 tool calls; blind tasks 0.82 vs 0.83 official | same grader |
+| 2026-11-27 | Newer MLX 0.32.5 (libmlx from the PyPI wheel, swapped into the dev build) | official 99.7 (no change) | runs cleanly; MLX version shows 0.32.5 |
+| 2026-11-27 | Interaction: padding on MLX 0.32.5 | code 139.3 with padding vs 147.6 without (−5.6%) | MLX 0.32.5 has its own small-row path; padding now hurts |
+| 2026-11-27 | MLX 0.32.5, int4u, no padding | 111.4 avg | same +11% as old MLX with padding |
+| 2026-11-27 | MLX 0.32.5, fusion on vs off (int4u, no pad) | 108.3 vs 110.2 | fusion −1.7% here; it was +0.5% on old MLX |
+| 2026-11-27 | MLX 0.32.5, uniform nvfp4 + fusion | 108.3 (prose 102.3, code 132.4, chat 90.2) | nvfp4 leads prose and chat, int4 leads code |
 
 ## Patches (`patches/ollama`, against v0.40.18)
 
@@ -40,6 +45,16 @@ prose, code, chat), from 99.7 tok/s.
 
 Built Go-only on the Mac (`go build`), with the MLX libraries of the shipped
 Ollama next to the binary. No Xcode needed.
+
+## What we learned so far
+
+- Patches interact. The same padding patch is +4.6% on the MLX that Ollama
+  0.40.18 ships and −5.6% on code with MLX 0.32.5. Fusion flips sign too. So
+  every patch is judged inside the stack it ships in.
+- The format that wins depends on the text: nvfp4 is faster on prose and chat,
+  int4 on code, where MTP drafts deeper and cheap 4-row verifies pay off.
+- Best so far: about +11% (111 tok/s) against 100. The +50% goal needs more
+  accepted tokens per weight pass, not only kernels.
 
 ## Upstream leads
 
