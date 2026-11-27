@@ -73,6 +73,25 @@ and chat.
 | 2026-11-27 | Patch idea: plain decode above 2 active requests (`OLLAMA_MLX_DRAFT_MAX_ACTIVE=2`) | 100 / 143 / 115 / 150 at 1 / 2 / 3 / 4 | negative: drafting still pays at 3–4 streams in this stack. Not kept |
 | 2026-11-27 | Temperature 1.0 (as Open WebUI uses), official vs best stack | 101.8 vs **114.1 (+12%)**; code 121.9 vs 148.9 | gains hold with sampling, a little smaller than at temperature 0 |
 
+## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
+
+Single stream: medians of 5 runs per prompt kind, temperature 0, thinking off.
+4 streams: total tok/s with 4 prose requests at once, wall clock, median of 3.
+
+| Model | Type | Prose | Code | Chat | Avg | 4 streams | With MLX 0.32.5: avg / 4 streams |
+|---|---|---|---|---|---|---|---|
+| `qwen3.8:27b-nvfp4` | dense 27B, MTP head | 93.1 | 116.8 | 85.7 | 98.5 | 212 | 101.4 / 208 |
+| `qwen3.6:35b-a3b` | MoE 35B, 3B active | 187.9 | 226.9 | 179.6 | 198.1 | 322 | 192.1 / 311 |
+| `gemma4:31b` | dense 31B | 79.1 | 96.3 | 65.0 | 80.1 | 188 | 80.3 / 188 |
+| `inkling-2-mini:26b-a5b-nvfp4` | looped MoE 26B | 84.6 | 94.8 | 79.1 | 86.2 | 84 | 88.1 / 86 |
+
+- Swapping in MLX 0.32.5 alone moves every model by 3% or less. Its value is
+  in combination with other patches (see the Qwen3.8 rows above).
+- Inkling 2 Mini gains nothing from 4 parallel requests (84 vs 86 for one).
+  Its looped layers very possibly keep the MLX runner from batching it.
+- Inkling's thinking cannot be fully turned off in Ollama 0.40.18, so its
+  tok/s here include hidden reasoning tokens.
+
 ## What we learned so far
 
 <picture>
