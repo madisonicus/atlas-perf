@@ -1,0 +1,21 @@
+mtp params 424.699392 M
+held-out features 22s
+stock head, held-out step-1 agreement: 0.8066 (loss 0.653)
+train features 740 in 630s
+ep 0 step 100 loss 0.578 675s
+ep 0 step 200 loss 0.602 703s
+ep 0 step 300 loss 0.633 736s
+ep 0 step 400 loss 0.605 770s
+ep 0 step 500 loss 0.556 801s
+ep 0 step 600 loss 0.502 833s
+ep 0 step 700 loss 0.640 867s
+epoch 0: held-out step-1 agreement 0.8082 (loss 0.627)
+ep 1 step 800 loss 0.292 908s
+ep 1 step 900 loss 0.377 935s
+ep 1 step 1000 loss 0.421 965s
+ep 1 step 1100 loss 0.426 995s
+ep 1 step 1200 loss 0.442 1028s
+ep 1 step 1300 loss 0.422 1060s
+ep 1 step 1400 loss 0.441 1094s
+epoch 1: held-out step-1 agreement 0.8079 (loss 0.630)
+saved 15 tensors
