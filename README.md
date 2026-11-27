@@ -11,6 +11,11 @@ real models, and offer what works upstream.
 **117 tok/s, +17%** over the official Ollama build (100 tok/s), from a
 uniform 4-bit build plus a DFlash2 draft. Code is +34%.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/decode-dark.svg">
+  <img alt="Grouped bar chart: decode tok/s for prose, code and chat across four builds of Qwen3.8 27B; the best build reaches 167 tok/s on code against 122 for the official build." src="charts/decode-light.svg" width="760">
+</picture>
+
 ## Scope
 
 | Axis | What we test |
@@ -66,8 +71,26 @@ and chat.
 | 2026-11-27 | DFlash2 `draft_num_predict` 4, 7, 10, 14 | 118.1 at every value | the option has no effect on the MLX runner |
 | 2026-11-27 | Parallel, total tok/s at 1 / 2 / 4 requests: official vs best stack (int4 + DFlash2 + fusion) | official 92 / 133 / 195; best 98 / 149 / 171 | best stack wins at 1–2 streams, loses at 4: DFlash2 drafts cost more in a batch than the MTP head |
 | 2026-11-27 | Patch idea: plain decode above 2 active requests (`OLLAMA_MLX_DRAFT_MAX_ACTIVE=2`) | 100 / 143 / 115 / 150 at 1 / 2 / 3 / 4 | negative: drafting still pays at 3–4 streams in this stack. Not kept |
+| 2026-11-27 | Temperature 1.0 (as Open WebUI uses), official vs best stack | 101.8 vs **114.1 (+12%)**; code 121.9 vs 148.9 | gains hold with sampling, a little smaller than at temperature 0 |
 
 ## What we learned so far
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/bandwidth-dark.svg">
+  <img alt="Bars: peak memory bandwidth 1,150 GB/s, matmuls of one step 1,006 GB/s, whole plain decode step 757 GB/s." src="charts/bandwidth-light.svg" width="760">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/rows-dark.svg">
+  <img alt="Lines: ms per decode step against rows per matmul. nvfp4 rises from 14 ms at one row to 38 ms at five rows; affine 4-bit drops to 16 ms from four rows." src="charts/rows-light.svg" width="760">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/parallel-dark.svg">
+  <img alt="Lines: total tok/s at 1, 2 and 4 parallel requests. The best single-stream build leads at 1 and 2, the official build leads at 4 (195 against 171)." src="charts/parallel-light.svg" width="760">
+</picture>
+
+
 
 - Patches interact. The same padding patch is +4.6% on the MLX that Ollama
   0.40.18 ships and −5.6% on code with MLX 0.32.5. Fusion flips sign too. So
@@ -97,6 +120,11 @@ Ollama next to the binary. No Xcode needed. To try MLX 0.32.5, copy
   speed up MTP verification and batched decode.
 - Ollama: prefix cache restore stops at 131,072 tokens; no disk paging; no KV
   quantization on MLX; no request priority.
+
+## Charts
+
+`charts/make_charts.py` draws every chart, light and dark, from the numbers in
+the results log.
 
 ## License
 
