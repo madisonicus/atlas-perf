@@ -27,7 +27,7 @@ The same saved state serves a new chat: with a 6.4k-token system prompt
 (tools, skills), a new chat gets its first word in 0.2 s, against a full
 re-read of the system prompt without it (3.7 s).
 
-Pull request branch (default on, with a unit test, on upstream main):
+Pull request branch (default on, on upstream main; tests: `TestLastTurnStarts`, and `TestScenarioEditedPreviousTurn` on the hybrid-cache scenario harness, which shows the restore move from the last periodic mark to the edited turn's start):
 [madisonicus/ollama `turn-start-snapshots`](https://github.com/madisonicus/ollama/tree/turn-start-snapshots).
 
 Fix: also schedule snapshots at the start of the last few turns (the
@@ -36,3 +36,6 @@ positions of the turn-start token, `<|im_start|>` for Qwen) in
 `patches/ollama/0006-mlxrunner-turn-start-snapshots.patch`. Each extra
 snapshot is one recurrent state (~150 MiB here). Repro:
 `bench/turns_ab.py`.
+
+
+Disclosure for the issue: found, written and measured with Claude (Anthropic) on the owner's M5 Ultra; reviewed and submitted by the owner. Ollama's CONTRIBUTING.md has no AI policy (checked 2026-11-27); it asks for an issue before a non-trivial PR.
