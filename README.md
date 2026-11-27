@@ -10,7 +10,9 @@ real models, and offer what works upstream.
 **Status (2026-11-27):** uniform 4-bit builds beat the official Ollama
 builds on two model families: Qwen3.8 27B **+18%** (117.7 tok/s, with a
 DFlash2 draft) and Gemma 4 31B **+14%** (91.6 tok/s, from Google's QAT
-weights), with no loss on our quality gate.
+weights), with no loss on our quality gate. On the Qwen3.6 35B-A3B MoE
+the same lever gives **+22%** (245 tok/s), with a possible quality cost
+still under test.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/decode-dark.svg">
@@ -77,6 +79,8 @@ and chat.
 | 2026-11-27 | Gemma 4 31B: same with uniform nvfp4 | 84.9 (+6%) | affine int4 beats nvfp4 here too |
 | 2026-11-27 | Quality, Gemma int4 QAT | 19/20 tool calls (official 19/20); blind tasks 0.90 vs 0.87 official | QAT weights hold quality at 4 bits |
 | 2026-11-27 | Long chat, 139k tokens, follow-up turn | 131,071 tokens from cache, 13.1 s to first word, with the default 8 GiB snapshot budget and with 32 GiB (patched `OLLAMA_MLX_SNAPSHOT_GB`) | the stop at 2^17 − 1 tokens is not the snapshot budget; cause still open |
+| 2026-11-27 | Qwen3.6 35B-A3B (MoE): uniform int4 from the bf16 weights, MTP head kept | **244.9 vs 200.0 (+22%)**; prose 224.4, code 292.0, chat 218.2 | the lever also works for MoE kernels |
+| 2026-11-27 | Quality, Qwen3.6 35B-A3B int4 | 19/20 tool calls (official 20/20); blind tasks 0.68 vs 0.75 | possible quality cost: one wrong shell command (0/5) decides most of the gap; needs more samples before use |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
