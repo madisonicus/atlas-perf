@@ -35,9 +35,9 @@ results log).
 **Code:** our Ollama patches live on branch
 [`atlas-dev` of madisonicus/ollama](https://github.com/madisonicus/ollama/tree/atlas-dev)
 (on top of v0.40.18), and branch
-[`atlas-next`](https://github.com/madisonicus/ollama/tree/atlas-next): upstream main
-plus open PR #19769 plus our patches, which atlas runs in production since
-2026-11-27. `patches/` keeps a copy of each of ours.
+[`atlas-next2`](https://github.com/madisonicus/ollama/tree/atlas-next2): upstream main
+plus open PRs #19745 and #19769 plus our patches, which atlas runs in
+production since 2026-11-27 (`atlas-next` is the same without #19745). `patches/` keeps a copy of each of ours.
 
 ## Scope
 
@@ -62,7 +62,8 @@ and chat.
   (prose, code, chat). Scripts in `bench/`.
 - Arms run interleaved, A/B/A/B, so drift hits every arm alike.
 - Noise floor (A/A, same build, 20 runs): the median-to-median gap is under
-  0.1% at the 95th percentile. Gains of 0.5% are real.
+  0.1% at the 95th percentile. But between separate test runs we saw ±2%
+  (padding rows, fusion flipped sign), so we treat gains under 2% as unproven.
 - Small gains count, and they interact: patches are tested inside the stack
   they ship in, then left out one at a time.
 - Quality gate for any build we would ship: 20 tool calls and six
@@ -114,9 +115,10 @@ and chat.
 | 2026-11-27 | Draft second choice at a rejection, 6 varied prompts per kind (`OLLAMA_MLX_ALT_STATS=1`, `bench/alt.py`) | at the first draft position the target token was the draft's second choice in **53% (prose) and 44% (chat)** of rejections; 39% and 35% over all positions | the target token after a first-position rejection is already free, so a second branch gains only the token after it: about +0.11 tokens per round on prose (21% of rounds reject at position 1, times 53%), near +4%. Small for the work a forked recurrent state needs. A better-trained draft is the larger lever |
 | 2026-11-27 | Self-distill the MTP head (`mtp/`): 740 of the target's own greedy chat answers (UltraChat prompts, ~300k tokens), labels = the 4-bit target's argmax, fp32 AdamW, 2 epochs, lr 1e-6 | held-out step-1 agreement **80.66% → 80.79%** (loss 0.653 → 0.630); train loss fell to ~0.42. lr 2e-5 and 3e-6 on smaller data made it worse (72%, 81.3% from 82.1%) | negative at this scale: Qwen's head already fits the model's own chat output, and the small gain does not pay for a new package. Draft quality needs a different idea (a larger or tree draft), not a fine-tune |
 | 2026-11-27 | **Follow-up turn, chat client flow** (history unchanged except the date stamp leaves the previous user message), Qwen3.8 27B int4u, `bench/turns_ab.py`. Stock vs patch 0006 (`OLLAMA_MLX_TURN_SNAPSHOTS=1`: also save state at the start of the last chat turns) | first word at 3.6k / 10k / 21k / 42k / 70k / 139k tokens: stock **2.02 / 1.45 / 3.13 / 0.73 / 4.21 / 12.5 s**; patched **0.11 / 0.12 / 0.15 / 0.19 / 0.25 / 0.46 s** | a hybrid model cannot rewind its recurrent state, so a prompt that diverges inside the previous turn restores to the last 8192-token mark (or 0) and reads the rest again. This was the "131,071 stop": not a 2^17 limit, only the 16th mark. 10–30x faster follow-ups |
-| 2026-11-27 | Open upstream PR [#19769](https://github.com/ollama/ollama/pull/19769) (batch DFlash2 drafts and recurrent replay across requests), int4u + DFlash2, total tok/s, median of 3 (`bench/conc.py`) | 1 client 98.2 → 98.1; **4 clients 184 → 203 (+10%)**; **8 clients 168 → 265 (+58%)** | the PR's own M5 Max numbers hold on M5 Ultra. Without it, 8 clients were slower than 4. Now in production on atlas with our patches (branch `atlas-next`) |
+| 2026-11-27 | Open upstream PR [#19769](https://github.com/ollama/ollama/pull/19769) (batch DFlash2 drafts and recurrent replay across requests), int4u + DFlash2, total tok/s, median of 3 (`bench/conc.py`) | 1 client 98.2 → 98.1; **4 clients 184 → 203 (+10%)**; **8 clients 168 → 265 (+58%)** | the PR's own M5 Max numbers hold on M5 Ultra. Without it, 8 clients were slower than 4. Went to production on atlas with our patches (branch `atlas-next`, later `atlas-next2` with #19745) |
 | 2026-11-27 | Open upstream PR [#19745](https://github.com/ollama/ollama/pull/19745) (save conversation caches to disk, restore after unload or restart), 21k-token chat, `bench/persist.py` | follow-up after a model unload **13.9 → 1.5 s**; after an Ollama restart **13.8 → 1.3–1.5 s** (most of it model load). Combined with #19769 and our patches (branch `atlas-next2`): same, speed within 1–3% | cost: **~2.2 GB written to the SSD per chat turn** on a 15k chat (iostat, 5 turns), 8.8 GB on disk for one chat. Not shipped: with models pinned in memory, unloads are rare, and the writes would wear the soldered SSD under batch jobs |
 | 2026-11-27 | Write-back disk cache: #19745 plus our `OLLAMA_KV_CACHE_WRITE_DELAY` (patch 0007; the PR waits 100 ms), 10m, policy `warm`, 15k chat | 5 turns 10 s apart: **11,054 MB → 7 MB** of disk traffic. Unload: one 2.2 GB write, 1.5 s; follow-up after it 1.37 s (14,706 of 14,723 cached). Restart: stop 1.4 s, then 1.37 s to first word | Ben's idea: write a conversation when it goes idle or its memory is needed, not after every turn. Shutdown, unload and memory pressure already skip the delay in the PR, so nothing else changes |
+| 2026-11-27 | Production check: int4u + DFlash2 on prod Ollama (patched, stock MLX libraries), 3 runs per kind | **128.6 tok/s avg (+29%)**: prose 107.8, code 189.6, chat 88.3 (medians) | higher than the test server's 117 (MLX 0.32.5 there; code 190 vs 167). Only 3 runs, and the test-server gap is not explained yet |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
@@ -163,7 +165,7 @@ Single stream: medians of 5 runs per prompt kind, temperature 0, thinking off.
   int4 on code, where MTP drafts deeper and cheap 4-row verifies pay off.
 - The best stack depends on the mode: DFlash2 wins one or two streams, the
   official MTP build wins four parallel streams.
-- Best so far: +17% (117 tok/s) against 100, from uniform int4 with a DFlash2 draft. The +50% goal needs more
+- Best so far: +29% (128.6 tok/s on prod, 117 on the test server) against 100, from uniform int4 with a DFlash2 draft. The +50% goal needs more
   accepted tokens per weight pass, not only kernels.
 
 ## Patches (`patches/ollama`)
