@@ -81,6 +81,7 @@ and chat.
 | 2026-11-27 | Long chat, 139k tokens, follow-up turn | 131,071 tokens from cache, 13.1 s to first word, with the default 8 GiB snapshot budget and with 32 GiB (patched `OLLAMA_MLX_SNAPSHOT_GB`) | the stop at 2^17 − 1 tokens is not the snapshot budget; cause still open |
 | 2026-11-27 | Qwen3.6 35B-A3B (MoE): uniform int4 from the bf16 weights, MTP head kept | **244.9 vs 200.0 (+22%)**; prose 224.4, code 292.0, chat 218.2 | the lever also works for MoE kernels |
 | 2026-11-27 | Quality, Qwen3.6 35B-A3B int4 | 19/20 tool calls (official 20/20); blind tasks 0.68 vs 0.75 | possible quality cost: one wrong shell command (0/5) decides most of the gap; needs more samples before use |
+| 2026-11-27 | Qwen3.6 35B-A3B int4, a real vision job: 44 hand-labeled wildlife photos, keywords from a fixed list | F1 0.849 vs 0.874 official (precision 0.853 vs 0.895, species recall 0.972 vs 0.944); 1.12 vs 1.21 s per photo | small quality loss and only 7% faster: per-photo time is mostly image prefill, not decode. Not worth it for this job |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
