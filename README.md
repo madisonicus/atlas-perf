@@ -7,12 +7,20 @@ Accelerators). We patch the open-source stack, mainly
 [MLX](https://github.com/ml-explore/mlx) runner, measure every change on
 real models, and offer what works upstream.
 
-**Status (2026-11-27):** uniform 4-bit builds beat the official Ollama
-builds on two model families: Qwen3.8 27B **+18%** (117.7 tok/s, with a
-DFlash2 draft) and Gemma 4 31B **+14%** (91.6 tok/s, from Google's QAT
-weights), with no loss on our quality gate. On the Qwen3.6 35B-A3B MoE
-the same lever gives **+22%** (245 tok/s), with a possible quality cost
-still under test.
+**Status (2026-11-27, evening):** in production on our own Mac Studio.
+
+| What | Before | Now | How |
+|---|---|---|---|
+| Writing speed, Qwen3.8 27B (avg of prose, code, chat) | 99.7 tok/s | **128.6 tok/s (+29%)** | uniform int4 build + DFlash2 draft |
+| First word on a chat follow-up (10k–70k tokens) | 0.7–4.2 s | **0.12–0.25 s** | turn-start snapshots (patch 0006) |
+| First word on a follow-up at 139k tokens | 12.5 s | **0.46 s** | same |
+| Total speed, 8 chats at once | 168 tok/s | **265 tok/s (+58%)** | upstream PR #19769 |
+| First word after a model unload or restart (21k chat) | 13.9 s | **1.4 s** | upstream PR #19745 + write-back delay (patch 0007) |
+
+Also measured: Gemma 4 31B +14% and Qwen3.6 35B-A3B +22% from the same
+uniform 4-bit lever. Not reached: +50% single-stream decode on prose and
+chat; the draft is accepted for only ~1.5 tokens per round there (see the
+results log).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/models-dark.svg">
@@ -158,7 +166,12 @@ Single stream: medians of 5 runs per prompt kind, temperature 0, thinking off.
 - Best so far: +17% (117 tok/s) against 100, from uniform int4 with a DFlash2 draft. The +50% goal needs more
   accepted tokens per weight pass, not only kernels.
 
-## Patches (`patches/ollama`, against v0.40.18)
+## Patches (`patches/ollama`)
+
+Each patch is off unless its environment variable is set. 0001–0006 were
+written against v0.40.18 (branch `atlas-dev`); production runs them on
+upstream main with PRs #19745 and #19769 (branch `atlas-next2`), plus 0007
+and 0008.
 
 1. `OLLAMA_MLX_SPECULATIVE=0`: turn draft heads off, to measure them.
 2. `OLLAMA_QUANTIZE_UNIFORM=1` (create), `OLLAMA_MLX_PAD_ROWS=1` and
@@ -168,6 +181,14 @@ Single stream: medians of 5 runs per prompt kind, temperature 0, thinking off.
 4. `OLLAMA_MLX_DRAFT_VOCAB` and `OLLAMA_MLX_DRAFT_VOCAB_FILE` (small draft head,
    token list from `bench/token_rank.py`), `OLLAMA_MLX_PROFILE=1` (time per block,
    research only), `OLLAMA_MLX_PROBE_MAX` (depth probe backoff cap).
+5. `OLLAMA_MLX_PAD_ROWS=3` (pad only 3 rows), `OLLAMA_MLX_ALT_STATS=1` (draft
+   second-choice counts, research only).
+6. **`OLLAMA_MLX_TURN_SNAPSHOTS=1`**: save state at the start of the last chat
+   turns. In production.
+7. **`OLLAMA_KV_CACHE_WRITE_DELAY`** (for PR #19745): write a conversation to
+   the disk cache once it is idle, not after every turn. In production (10m).
+8. **`no_cache_persist`** request option: keep a request out of the disk
+   cache. Open WebUI's Temporary Chats send it. In production.
 
 Built Go-only on the Mac (`go build`), with the MLX libraries of the shipped
 Ollama next to the binary. No Xcode needed. To try MLX 0.32.5, copy
@@ -182,8 +203,13 @@ Drafts of the issues we plan to file are in `upstream/`.
 - MLX: no fast fp4 kernel for 2–5 rows on NAX GPUs (`use_qmv_mma` min_rows 6);
   affine has one from 4 rows (#4787, #4827). A fp port for 2–5 rows would
   speed up MTP verification and batched decode.
-- Ollama: (solved, patch 0006) follow-ups re-read up to 8k tokens because the prefix cache saves recurrent state only every 8192 tokens; no disk paging; no KV
-  quantization on MLX; no request priority.
+- Ollama: follow-ups re-read up to 8k tokens because the prefix cache saves
+  recurrent state only every 8192 tokens (fixed by patch 0006; issue draft in
+  `upstream/`). No KV quantization on MLX; no request priority.
+- Ollama open PRs we tested: #19769 (batched DFlash2 drafts, +58% at 8
+  clients) and #19745 (disk cache; 2.2 GB written per turn unless writes wait
+  for idle, our patch 0007). Both run in production here. #18358 is not
+  needed for Qwen3.8.
 
 ## Charts
 

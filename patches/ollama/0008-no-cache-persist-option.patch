@@ -1,0 +1,75 @@
+From 527734d0ab95043264209fdf404b28bf9201a4ec Mon Sep 17 00:00:00 2001
+From: piargus <piargus@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 13:36:26 -0500
+Subject: [PATCH] no_cache_persist option keeps a request out of the MLX disk
+ cache
+
+---
+ api/types.go                      | 10 +++++++---
+ mlxrunner/checkpoint_scheduler.go | 11 +++++++++++
+ mlxrunner/scheduler.go            |  6 +++++-
+ 3 files changed, 23 insertions(+), 4 deletions(-)
+
+diff --git a/api/types.go b/api/types.go
+index 1c36d86b..f72883bc 100644
+--- a/api/types.go
++++ b/api/types.go
+@@ -696,9 +696,13 @@ type Options struct {
+ 	Runner
+ 
+ 	// Predict options used at runtime
+-	NumKeep          int      `json:"num_keep,omitempty"`
+-	Seed             int      `json:"seed,omitempty"`
+-	NumPredict       int      `json:"num_predict,omitempty"`
++	NumKeep    int `json:"num_keep,omitempty"`
++	Seed       int `json:"seed,omitempty"`
++	NumPredict int `json:"num_predict,omitempty"`
++	// NoCachePersist keeps this request's conversation state out of the MLX
++	// disk cache (OLLAMA_KV_CACHE_*). For chats that must leave nothing on
++	// disk, such as a client's temporary chats. Memory caching is unchanged.
++	NoCachePersist   bool     `json:"no_cache_persist,omitempty"`
+ 	TopK             int      `json:"top_k,omitempty"`
+ 	TopP             float32  `json:"top_p,omitempty"`
+ 	MinP             float32  `json:"min_p,omitempty"`
+diff --git a/mlxrunner/checkpoint_scheduler.go b/mlxrunner/checkpoint_scheduler.go
+index 46fce477..33730048 100644
+--- a/mlxrunner/checkpoint_scheduler.go
++++ b/mlxrunner/checkpoint_scheduler.go
+@@ -112,6 +112,17 @@ func (p *runnerCheckpoints) open(c *prefixCache) *checkpointCache {
+ 	return d
+ }
+ 
++// forget drops the slot's queued checkpoint after a no_cache_persist request:
++// the slot's state now holds that request's tokens, and a later write of the
++// queued nodes must not carry them to disk.
++func (p *runnerCheckpoints) forget(s *cacheSession) {
++	if p == nil || s == nil {
++		return
++	}
++	delete(p.pending, s.cache)
++	slog.Info("conversation kept off the disk cache (no_cache_persist)")
++}
++
+ func (p *runnerCheckpoints) completed(s *cacheSession) {
+ 	if p == nil || s == nil || len(s.cache.activePath) < 2 {
+ 		return
+diff --git a/mlxrunner/scheduler.go b/mlxrunner/scheduler.go
+index 80267c2e..c830e613 100644
+--- a/mlxrunner/scheduler.go
++++ b/mlxrunner/scheduler.go
+@@ -573,7 +573,11 @@ func (s *batchScheduler) finish(slot *batchSlot, err error) {
+ 	req.spec.close()
+ 	req.session.close()
+ 	if err == nil {
+-		s.r.checkpoints.completed(req.session)
++		if req.request.Options.NoCachePersist {
++			s.r.checkpoints.forget(req.session)
++		} else {
++			s.r.checkpoints.completed(req.session)
++		}
+ 	}
+ 	if slog.Default().Enabled(req.request.Ctx, logutil.LevelTrace) {
+ 		slot.cache.dumpTree()
+-- 
+2.54.0 (Apple Git-157)
+
