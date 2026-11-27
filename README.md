@@ -150,6 +150,9 @@ Ollama next to the binary. No Xcode needed. To try MLX 0.32.5, copy
 
 ## Upstream leads
 
+Drafts of the issues we plan to file are in `upstream/`.
+
+
 - MLX: no fast fp4 kernel for 2–5 rows on NAX GPUs (`use_qmv_mma` min_rows 6);
   affine has one from 4 rows (#4787, #4827). A fp port for 2–5 rows would
   speed up MTP verification and batched decode.
