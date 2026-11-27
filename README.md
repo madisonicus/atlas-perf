@@ -7,9 +7,10 @@ Accelerators). We patch the open-source stack, mainly
 [MLX](https://github.com/ml-explore/mlx) runner, measure every change on
 real models, and offer what works upstream.
 
-**Status (2026-11-27):** best single-stream decode on Qwen3.8 27B is
-**117 tok/s, +17%** over the official Ollama build (100 tok/s), from a
-uniform 4-bit build plus a DFlash2 draft. Code is +34%.
+**Status (2026-11-27):** uniform 4-bit builds beat the official Ollama
+builds on two model families: Qwen3.8 27B **+18%** (117.7 tok/s, with a
+DFlash2 draft) and Gemma 4 31B **+14%** (91.6 tok/s, from Google's QAT
+weights), with no loss on our quality gate.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/decode-dark.svg">
@@ -72,6 +73,9 @@ and chat.
 | 2026-11-27 | Parallel, total tok/s at 1 / 2 / 4 requests: official vs best stack (int4 + DFlash2 + fusion) | official 92 / 133 / 195; best 98 / 149 / 171 | best stack wins at 1–2 streams, loses at 4: DFlash2 drafts cost more in a batch than the MTP head |
 | 2026-11-27 | Patch idea: plain decode above 2 active requests (`OLLAMA_MLX_DRAFT_MAX_ACTIVE=2`) | 100 / 143 / 115 / 150 at 1 / 2 / 3 / 4 | negative: drafting still pays at 3–4 streams in this stack. Not kept |
 | 2026-11-27 | Temperature 1.0 (as Open WebUI uses), official vs best stack | 101.8 vs **114.1 (+12%)**; code 121.9 vs 148.9 | gains hold with sampling, a little smaller than at temperature 0 |
+| 2026-11-27 | Gemma 4 31B: uniform int4 from Google's QAT weights + its assistant draft (MLX 0.32.5) | **91.6 vs 80.1 (+14%)**; prose 85.8, code 118.9 (+23%), chat 70.0 | the uniform 4-bit lever carries over to a second model family |
+| 2026-11-27 | Gemma 4 31B: same with uniform nvfp4 | 84.9 (+6%) | affine int4 beats nvfp4 here too |
+| 2026-11-27 | Quality, Gemma int4 QAT | 19/20 tool calls (official 19/20); blind tasks 0.90 vs 0.87 official | QAT weights hold quality at 4 bits |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
