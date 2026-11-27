@@ -6,4 +6,4 @@ Results on an Apple M5 Ultra (96 GB, 80-core GPU), Qwen3.8 27B uniform int4 + DF
 | 4 | 184.0 | 202.6 (+10%) |
 | 8 | 167.7 | 264.5 (+58%) |
 
-Without the PR, 8 clients gave less total throughput than 4. Single-stream speed is unchanged. We run it in production together with #19745; JSON output, tool calls, vision (Qwen3.6 35B-A3B) and embeddings checked fine. (Measured with Claude on my own machine.)
+Without the PR, 8 clients gave less total throughput than 4. Single-stream speed is unchanged. I run it in production together with #19745; JSON output, tool calls, vision (Qwen3.6 35B-A3B) and embeddings checked fine. (Measured with Claude on my own machine.)
