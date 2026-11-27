@@ -64,6 +64,8 @@ and chat.
 | 2026-11-27 | uniform nvfp4 + DFlash2 | 117.0 (prose 93.2, code 170.1, chat 87.8) | same average as int4; int4 better on prose |
 | 2026-11-27 | uniform int4 + DFlash2 + fused gates | **117.7** vs 117.0 without (+0.6%) | fusion helps again in this stack |
 | 2026-11-27 | DFlash2 `draft_num_predict` 4, 7, 10, 14 | 118.1 at every value | the option has no effect on the MLX runner |
+| 2026-11-27 | Parallel, total tok/s at 1 / 2 / 4 requests: official vs best stack (int4 + DFlash2 + fusion) | official 92 / 133 / 195; best 98 / 149 / 171 | best stack wins at 1–2 streams, loses at 4: DFlash2 drafts cost more in a batch than the MTP head |
+| 2026-11-27 | Patch idea: plain decode above 2 active requests (`OLLAMA_MLX_DRAFT_MAX_ACTIVE=2`) | 100 / 143 / 115 / 150 at 1 / 2 / 3 / 4 | negative: drafting still pays at 3–4 streams in this stack. Not kept |
 
 ## What we learned so far
 
@@ -72,6 +74,8 @@ and chat.
   every patch is judged inside the stack it ships in.
 - The format that wins depends on the text: nvfp4 is faster on prose and chat,
   int4 on code, where MTP drafts deeper and cheap 4-row verifies pay off.
+- The best stack depends on the mode: DFlash2 wins one or two streams, the
+  official MTP build wins four parallel streams.
 - Best so far: +17% (117 tok/s) against 100, from uniform int4 with a DFlash2 draft. The +50% goal needs more
   accepted tokens per weight pass, not only kernels.
 
