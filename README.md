@@ -1,23 +1,46 @@
-# atlas-perf
+# Mac Studio M5 Ultra LLM lab
 
-Faster local LLM inference on one Mac Studio (Apple M5 Ultra, 96 GB, 1.2 TB/s),
-by patching the open-source stack (Ollama 0.40.18 and its MLX runner) and
-measuring every change. Started 2026-11-26.
+Open research on making local LLM inference faster on one Apple Mac Studio
+(M5 Ultra, 96 GB unified memory, 1.2 TB/s, 80 GPU cores with Neural
+Accelerators). We patch the open-source stack, mainly
+[Ollama](https://github.com/ollama/ollama) and its
+[MLX](https://github.com/ml-explore/mlx) runner, measure every change on
+real models, and offer what works upstream.
 
-**Goal:** cut the time from send to last word in half against the Phase 0
-baseline, with no quality loss, and offer each patch that helps upstream.
-Part goal for decode: +50% single-stream tok/s on `qwen3.8:27b` (average of
-prose, code, chat), from 99.7 tok/s.
+**Status (2026-11-27):** best single-stream decode on Qwen3.8 27B is
+**117 tok/s, +17%** over the official Ollama build (100 tok/s), from a
+uniform 4-bit build plus a DFlash2 draft. Code is +34%.
+
+## Scope
+
+| Axis | What we test |
+|---|---|
+| Models | Qwen3.8 27B (dense, hybrid linear attention, MTP head), Qwen3.6 35B-A3B (MoE), Gemma 4 31B, Inkling 2 Mini, abliterated variants |
+| Formats | nvfp4, mxfp4, affine int4, 8-bit mixes, uniform vs mixed policies |
+| Drafting | none, built-in MTP head, DFlash2 block drafts, grafted heads |
+| Modes | single stream; 2–8 parallel streams; long context (30k–140k) and prompt-cache reuse; voice-style short answers with thinking off |
+| Stack | Ollama 0.40.18; its bundled MLX (Nov 6) vs MLX 0.32.5 |
+
+## Goal
+
+Cut the time from send to last word in half against the baseline, with no
+loss of quality, and send each patch that helps upstream. Part goal for
+decode: +50% single-stream tok/s on Qwen3.8 27B, averaged over prose, code
+and chat.
 
 ## Method
 
-- Idle machine only. Temperature 0, 400 output tokens, three prompt kinds.
+- Idle machine only. Temperature 0, 400 output tokens, three prompt kinds
+  (prose, code, chat). Scripts in `bench/`.
 - Arms run interleaved, A/B/A/B, so drift hits every arm alike.
 - Noise floor (A/A, same build, 20 runs): the median-to-median gap is under
   0.1% at the 95th percentile. Gains of 0.5% are real.
-- Small gains count, and they can interact: patches are tested as a stack
-  and then left out one at a time, not only alone.
-- Quality gate: 20 tool calls and six blind-graded tasks (`../bakeoff`).
+- Small gains count, and they interact: patches are tested inside the stack
+  they ship in, then left out one at a time.
+- Quality gate for any build we would ship: 20 tool calls and six
+  blind-graded tasks (long-context recall, incident triage, message triage,
+  bulk classification, safe shell commands, multi-step planning), graded by
+  a separate model that does not see which build wrote the answer.
 
 ## Results log
 
@@ -36,15 +59,8 @@ prose, code, chat), from 99.7 tok/s.
 | 2026-11-27 | MLX 0.32.5, int4u, no padding | 111.4 avg | same +11% as old MLX with padding |
 | 2026-11-27 | MLX 0.32.5, fusion on vs off (int4u, no pad) | 108.3 vs 110.2 | fusion −1.7% here; it was +0.5% on old MLX |
 | 2026-11-27 | MLX 0.32.5, uniform nvfp4 + fusion | 108.3 (prose 102.3, code 132.4, chat 90.2) | nvfp4 leads prose and chat, int4 leads code |
-
-## Patches (`patches/ollama`, against v0.40.18)
-
-1. `OLLAMA_MLX_SPECULATIVE=0`: turn draft heads off, to measure them.
-2. `OLLAMA_QUANTIZE_UNIFORM=1` (create), `OLLAMA_MLX_PAD_ROWS=1` and
-   `OLLAMA_MLX_FUSE=1` (runner).
-
-Built Go-only on the Mac (`go build`), with the MLX libraries of the shipped
-Ollama next to the binary. No Xcode needed.
+| 2026-11-27 | MLX 0.32.5, official DFlash2 build | 108.2 (code 149.1) | z-lab DFlash2 draft |
+| 2026-11-27 | MLX 0.32.5, uniform int4 + DFlash2 draft (`DRAFT` in the Modelfile) | **117.1** (prose 99.1, code 166.8, chat 85.3) vs MTP 109.0 | best so far: +17% over official |
 
 ## What we learned so far
 
@@ -53,8 +69,19 @@ Ollama next to the binary. No Xcode needed.
   every patch is judged inside the stack it ships in.
 - The format that wins depends on the text: nvfp4 is faster on prose and chat,
   int4 on code, where MTP drafts deeper and cheap 4-row verifies pay off.
-- Best so far: about +11% (111 tok/s) against 100. The +50% goal needs more
+- Best so far: +17% (117 tok/s) against 100, from uniform int4 with a DFlash2 draft. The +50% goal needs more
   accepted tokens per weight pass, not only kernels.
+
+## Patches (`patches/ollama`, against v0.40.18)
+
+1. `OLLAMA_MLX_SPECULATIVE=0`: turn draft heads off, to measure them.
+2. `OLLAMA_QUANTIZE_UNIFORM=1` (create), `OLLAMA_MLX_PAD_ROWS=1` and
+   `OLLAMA_MLX_FUSE=1` (runner).
+
+Built Go-only on the Mac (`go build`), with the MLX libraries of the shipped
+Ollama next to the binary. No Xcode needed. To try MLX 0.32.5, copy
+`libmlx.dylib` and `mlx.metallib` from the `mlx` PyPI wheel into
+`mlx_metal_v4/` next to the binary.
 
 ## Upstream leads
 
@@ -63,3 +90,7 @@ Ollama next to the binary. No Xcode needed.
   speed up MTP verification and batched decode.
 - Ollama: prefix cache restore stops at 131,072 tokens; no disk paging; no KV
   quantization on MLX; no request priority.
+
+## License
+
+MIT, as Ollama. See `LICENSE`.
