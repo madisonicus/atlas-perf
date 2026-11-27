@@ -1,0 +1,38 @@
+From 3a25f168f82a319191c8ebd3e437abe1b64f366b Mon Sep 17 00:00:00 2001
+From: piargus <piargus@fleet>
+Date: Thu, 26 Nov 2026 21:25:17 -0500
+Subject: [PATCH] mlxrunner: OLLAMA_MLX_SPECULATIVE=0 turns off draft heads
+
+---
+ mlxrunner/speculate.go | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/mlxrunner/speculate.go b/mlxrunner/speculate.go
+index c9b7228..dff0bd8 100644
+--- a/mlxrunner/speculate.go
++++ b/mlxrunner/speculate.go
+@@ -3,6 +3,8 @@ package mlxrunner
+ import (
+ 	"errors"
+ 	"fmt"
++	"log/slog"
++	"os"
+ 	"time"
+ 
+ 	"github.com/ollama/ollama/mlx"
+@@ -80,6 +82,12 @@ func newSpeculation(r *Runner, slotID int, draft model.DraftModel, targets, draf
+ 	if draft == nil {
+ 		return nil
+ 	}
++	// OLLAMA_MLX_SPECULATIVE=0 decodes plainly even when the checkpoint ships a
++	// draft head, so the draft's gain can be measured against plain decode.
++	if os.Getenv("OLLAMA_MLX_SPECULATIVE") == "0" {
++		slog.Info("speculative decoding disabled by OLLAMA_MLX_SPECULATIVE=0")
++		return nil
++	}
+ 	s := &speculation{r: r, slotID: slotID, draft: draft, targets: targets, draftKV: draftKV, depth: newDepthController()}
+ 	if bd, ok := draft.(model.BlockDraft); ok {
+ 		s.drafter = newDFlashDrafter(s, bd)
+-- 
+2.54.0 (Apple Git-157)
+

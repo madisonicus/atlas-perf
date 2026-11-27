@@ -1,0 +1,161 @@
+From 2fa7e356e74d7ebc0bd673a9b127731863b2a52c Mon Sep 17 00:00:00 2001
+From: piargus <piargus@fleet>
+Date: Fri, 27 Nov 2026 08:11:52 -0500
+Subject: [PATCH] uniform quantization, small-row padding, fused qwen3.5 gates
+ (env flags)
+
+---
+ create/create.go                   |  8 +++++--
+ mlxrunner/model/qwen3_5/qwen3_5.go | 38 +++++++++++++++++++++++++++---
+ mlxrunner/nn/linear.go             | 25 +++++++++++++++++++-
+ 3 files changed, 65 insertions(+), 6 deletions(-)
+
+diff --git a/create/create.go b/create/create.go
+index 09d9913..1670994 100644
+--- a/create/create.go
++++ b/create/create.go
+@@ -214,9 +214,13 @@ func GetTensorQuantization(name string, shape []int32, quantize string) string {
+ 		return ""
+ 	}
+ 
++	// OLLAMA_QUANTIZE_UNIFORM=1 quantizes every eligible tensor to the requested
++	// type, with no 8-bit promotions, as the official Ollama builds do.
++	uniform := os.Getenv("OLLAMA_QUANTIZE_UNIFORM") == "1"
++
+ 	// lm_head is too sensitive for 4-bit types; the 8-bit type in the requested
+ 	// family keeps quality close to bf16 while saving decode bandwidth.
+-	if strings.HasSuffix(name, "lm_head.weight") {
++	if !uniform && strings.HasSuffix(name, "lm_head.weight") {
+ 		if e := eightBit(quantNorm); isAligned(shape, e) {
+ 			return e
+ 		}
+@@ -234,7 +238,7 @@ func GetTensorQuantization(name string, shape []int32, quantize string) string {
+ 	}
+ 
+ 	// Promote sensitive projections to 8-bit; fp4 skips experts since their kernels take a single mode.
+-	if quantNorm == "int4" || ((quantNorm == "nvfp4" || quantNorm == "mxfp4") && !stackedExpert) {
++	if !uniform && (quantNorm == "int4" || ((quantNorm == "nvfp4" || quantNorm == "mxfp4") && !stackedExpert)) {
+ 		if strings.Contains(name, ".v_proj") || strings.Contains(name, ".k_proj") || strings.Contains(name, "down_proj") {
+ 			if e := eightBit(quantNorm); isAligned(shape, e) {
+ 				return e
+diff --git a/mlxrunner/model/qwen3_5/qwen3_5.go b/mlxrunner/model/qwen3_5/qwen3_5.go
+index f7553db..d3346ee 100644
+--- a/mlxrunner/model/qwen3_5/qwen3_5.go
++++ b/mlxrunner/model/qwen3_5/qwen3_5.go
+@@ -6,6 +6,7 @@ import (
+ 	"fmt"
+ 	"log/slog"
+ 	"math"
++	"os"
+ 	"slices"
+ 	"strings"
+ 
+@@ -1108,12 +1109,39 @@ func (a *FullAttention) Forward(x *mlx.Array, b *batch.Batch, c cache.Layer, pos
+ 	}
+ 	out := nn.ScaledDotProductAttention(b, q, cfg.Scale, kv, nn.WithMask(mask))
+ 	out = mlx.Reshape(mlx.Transpose(out, 0, 2, 1, 3), B, L, cfg.NumAttentionHeads*cfg.HeadDim)
+-	gateSigmoid := mlx.Sigmoid(gate)
+-	out = mlx.Mul(out, gateSigmoid)
++	if fuseSmallOps {
++		out = attentionOutputGate(out, gate)
++	} else {
++		gateSigmoid := mlx.Sigmoid(gate)
++		out = mlx.Mul(out, gateSigmoid)
++	}
+ 	out = a.OProj.Forward(out)
+ 	return out
+ }
+ 
++// fuseSmallOps is OLLAMA_MLX_FUSE=1: compile the elementwise tails of the
++// attention and gated-delta blocks into one kernel each. A small kernel costs
++// 11-16 us on an M5 Ultra, and decode runs hundreds of them per token
++// (measured 2026-11-27).
++var fuseSmallOps = os.Getenv("OLLAMA_MLX_FUSE") == "1"
++
++var gatedDeltaOutputGate = mlx.Compile2(
++	"Qwen35GatedDeltaOutputGate",
++	func(out, z *mlx.Array) *mlx.Array {
++		dtype := out.DType()
++		return mlx.Mul(out.AsType(mlx.DTypeFloat32), mlx.SiLU(z.AsType(mlx.DTypeFloat32))).AsType(dtype)
++	},
++	mlx.Shapeless(),
++)
++
++var attentionOutputGate = mlx.Compile2(
++	"Qwen35AttentionOutputGate",
++	func(out, gate *mlx.Array) *mlx.Array {
++		return mlx.Mul(out, mlx.Sigmoid(gate))
++	},
++	mlx.Shapeless(),
++)
++
+ func (g *GatedDeltaNet) Forward(x *mlx.Array, b *batch.Batch, c cache.Layer, B, L int32, cfg *Config) *mlx.Array {
+ 	keyDim := cfg.LinearNumKeyHeads * cfg.LinearKeyHeadDim
+ 	valueDim := cfg.LinearNumValueHeads * cfg.LinearValueHeadDim
+@@ -1151,7 +1179,11 @@ func (g *GatedDeltaNet) Forward(x *mlx.Array, b *batch.Batch, c cache.Layer, B,
+ 	out, deltaStates := nn.GatedDelta(b, convOut, mixedBA, g.DtBias, g.AExp, opts...)
+ 	outDType := out.DType()
+ 	out = mlx.RMSNormFn(out, g.NormWeight, cfg.RMSNormEps)
+-	out = mlx.Mul(out.AsType(mlx.DTypeFloat32), mlx.SiLU(z.AsType(mlx.DTypeFloat32))).AsType(outDType)
++	if fuseSmallOps {
++		out = gatedDeltaOutputGate(out, z)
++	} else {
++		out = mlx.Mul(out.AsType(mlx.DTypeFloat32), mlx.SiLU(z.AsType(mlx.DTypeFloat32))).AsType(outDType)
++	}
+ 	out = mlx.Reshape(out, B, L, valueDim)
+ 	out = g.OutProj.Forward(out)
+ 	if rc != nil {
+diff --git a/mlxrunner/nn/linear.go b/mlxrunner/nn/linear.go
+index fcde0e8..588dd04 100644
+--- a/mlxrunner/nn/linear.go
++++ b/mlxrunner/nn/linear.go
+@@ -1,6 +1,10 @@
+ package nn
+ 
+-import "github.com/ollama/ollama/mlx"
++import (
++	"os"
++
++	"github.com/ollama/ollama/mlx"
++)
+ 
+ // LinearLayer is an interface for linear layers (both regular and quantized).
+ type LinearLayer interface {
+@@ -78,6 +82,9 @@ func (ql *QuantizedLinear) Forward(x *mlx.Array) *mlx.Array {
+ 	return out
+ }
+ 
++// padSmallRows is OLLAMA_MLX_PAD_ROWS=1: pad 2-3 row affine 4-bit matmuls to 4.
++var padSmallRows = os.Getenv("OLLAMA_MLX_PAD_ROWS") == "1"
++
+ func (ql *QuantizedLinear) matmul(x, globalScale *mlx.Array) *mlx.Array {
+ 	var shape []int
+ 	if x.NumDims() == 3 && x.Dim(0) > 1 {
+@@ -87,8 +94,24 @@ func (ql *QuantizedLinear) matmul(x, globalScale *mlx.Array) *mlx.Array {
+ 		shape = x.Dims()
+ 		x = x.Reshape(-1, shape[2])
+ 	}
++	// MLX runs 2 or 3 rows of affine 4-bit through the vector kernels, at
++	// 1.3-1.8x the cost of one row, but 4 rows through qmv_nax at about 1.1x
++	// (M5 Ultra, measured 2026-11-27). Pad to 4 rows and drop the extra ones.
++	rows := 0
++	var lead []int
++	if padSmallRows && ql.Mode == "affine" && ql.Bits == 4 {
++		if n := x.Size() / x.Dim(-1); n == 2 || n == 3 {
++			rows, lead = n, x.Dims()
++			x = mlx.PadConstant(x.Reshape(n, lead[len(lead)-1]), []int{0}, []int{0}, []int{4 - n})
++		}
++	}
+ 	out := mlx.QuantizedMatmul(x, ql.Weight, ql.Scales, ql.QBiases, true,
+ 		ql.GroupSize, ql.Bits, ql.Mode, globalScale)
++	if rows > 0 {
++		out = out.Slice(mlx.Slice(0, rows), mlx.Slice())
++		lead[len(lead)-1] = out.Dim(-1)
++		out = out.Reshape(lead...)
++	}
+ 	if shape != nil {
+ 		shape[2] = out.Dim(-1)
+ 		out = out.Reshape(shape...)
+-- 
+2.54.0 (Apple Git-157)
+
