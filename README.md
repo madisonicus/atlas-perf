@@ -24,6 +24,11 @@ still under test.
   <img alt="Grouped bar chart: decode tok/s for prose, code and chat across four builds of Qwen3.8 27B; the best build reaches 167 tok/s on code against 122 for the official build." src="charts/decode-light.svg" width="760">
 </picture>
 
+**Code:** our Ollama patches live on branch
+[`atlas-dev` of madisonicus/ollama](https://github.com/madisonicus/ollama/tree/atlas-dev)
+(on top of v0.40.18). `patches/` keeps a copy of each. Since 2026-11-27 our
+own atlas runs this build in production.
+
 ## Scope
 
 | Axis | What we test |
