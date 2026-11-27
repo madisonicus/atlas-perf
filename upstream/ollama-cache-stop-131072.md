@@ -23,6 +23,13 @@ tokens are read again on every turn.
 | 70k | 4.21 s | 0.25 s |
 | 139k | 12.5 s | 0.46 s |
 
+The same saved state serves a new chat: with a 6.4k-token system prompt
+(tools, skills), a new chat gets its first word in 0.2 s, against a full
+re-read of the system prompt without it (3.7 s).
+
+Pull request branch (default on, with a unit test, on upstream main):
+[madisonicus/ollama `turn-start-snapshots`](https://github.com/madisonicus/ollama/tree/turn-start-snapshots).
+
 Fix: also schedule snapshots at the start of the last few turns (the
 positions of the turn-start token, `<|im_start|>` for Qwen) in
 `scheduleGenerationSnapshots`. About 40 lines; patch
