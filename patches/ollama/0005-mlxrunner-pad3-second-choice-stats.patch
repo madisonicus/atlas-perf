@@ -1,0 +1,169 @@
+From 7a27ec82d1b855b7b3b24c51d383c84d102ca536 Mon Sep 17 00:00:00 2001
+From: piargus <piargus@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 11:24:38 -0500
+Subject: [PATCH] mlxrunner: pad-only-3 rows mode, draft second-choice stats
+
+---
+ mlxrunner/alt_stats.go | 42 ++++++++++++++++++++++++++++++++++++++++++
+ mlxrunner/mtp.go       | 13 ++++++++++++-
+ mlxrunner/nn/linear.go |  7 +++++--
+ mlxrunner/speculate.go | 11 ++++++++++-
+ 4 files changed, 69 insertions(+), 4 deletions(-)
+ create mode 100644 mlxrunner/alt_stats.go
+
+diff --git a/mlxrunner/alt_stats.go b/mlxrunner/alt_stats.go
+new file mode 100644
+index 0000000..90d4574
+--- /dev/null
++++ b/mlxrunner/alt_stats.go
+@@ -0,0 +1,42 @@
++package mlxrunner
++
++import (
++	"fmt"
++	"log/slog"
++	"os"
++	"sync"
++)
++
++// altStatsOn is OLLAMA_MLX_ALT_STATS=1: at each rejected draft position, count
++// how often the target's token was the draft's second choice. Research only.
++var altStatsOn = os.Getenv("OLLAMA_MLX_ALT_STATS") == "1"
++
++type altCounter struct {
++	mu          sync.Mutex
++	rejects     [8]int
++	hits        [8]int
++	total, hitN int
++}
++
++var altStats altCounter
++
++func (a *altCounter) observe(pos int, hit bool) {
++	a.mu.Lock()
++	defer a.mu.Unlock()
++	p := min(pos, 7)
++	a.rejects[p]++
++	a.total++
++	if hit {
++		a.hits[p]++
++		a.hitN++
++	}
++	if a.total%500 == 0 {
++		s := ""
++		for i := range 8 {
++			if a.rejects[i] > 0 {
++				s += fmt.Sprintf("%d:%d/%d ", i+1, a.hits[i], a.rejects[i])
++			}
++		}
++		slog.Info("draft second choice at rejection", "hit_rate", fmt.Sprintf("%.2f", float64(a.hitN)/float64(a.total)), "by_position", s)
++	}
++}
+diff --git a/mlxrunner/mtp.go b/mlxrunner/mtp.go
+index 3e47c41..6d0faf7 100644
+--- a/mlxrunner/mtp.go
++++ b/mlxrunner/mtp.go
+@@ -2,6 +2,7 @@ package mlxrunner
+ 
+ import (
+ 	"fmt"
++	"math"
+ 	"slices"
+ 
+ 	"github.com/ollama/ollama/mlx"
+@@ -296,7 +297,7 @@ func (d *mtpDraftSession) propose(current *mlx.Array, maxTokens int) *draftCandi
+ 		lastToken := current.ExpandDims(-1)
+ 		lastHidden := d.frontierHidden
+ 		draftDists := make([]sampler.Distribution, 0, maxTokens)
+-		var prefix *mlx.Array
++		var prefix, alts *mlx.Array
+ 
+ 		for i := range maxTokens {
+ 			var hidden, auxHidden *mlx.Array
+@@ -329,6 +330,15 @@ func (d *mtpDraftSession) propose(current *mlx.Array, maxTokens int) *draftCandi
+ 			// penalties shape proposals the same way they shape validation.
+ 			dist := r.Sampler.Distribution(spec.slotID, stepLogits, prefix)
+ 			nextToken := r.Sampler.SampleDistribution(spec.slotID, dist)
++			if altStatsOn {
++				ninf := mlx.AddScalar(mlx.Zeros(stepLogits.DType(), stepLogits.Dim(0), 1), float32(math.Inf(-1)))
++				alt := stepLogits.PutAlongAxis(nextToken.Reshape(stepLogits.Dim(0), 1).AsType(mlx.DTypeInt32), ninf, -1).Argmax(-1, true).AsType(mlx.DTypeInt32)
++				if alts == nil {
++					alts = alt
++				} else {
++					alts = alts.Concatenate(1, alt)
++				}
++			}
+ 
+ 			lastToken = nextToken.ExpandDims(-1)
+ 			draftDists = append(draftDists, dist)
+@@ -341,6 +351,7 @@ func (d *mtpDraftSession) propose(current *mlx.Array, maxTokens int) *draftCandi
+ 		candidates = &draftCandidates{
+ 			tokens: prefix,
+ 			dist:   sampler.ConcatenateDistributions(draftDists),
++			alt:    alts,
+ 		}
+ 		return candidates.Arrays()
+ 	})
+diff --git a/mlxrunner/nn/linear.go b/mlxrunner/nn/linear.go
+index 588dd04..e2b3844 100644
+--- a/mlxrunner/nn/linear.go
++++ b/mlxrunner/nn/linear.go
+@@ -83,7 +83,10 @@ func (ql *QuantizedLinear) Forward(x *mlx.Array) *mlx.Array {
+ }
+ 
+ // padSmallRows is OLLAMA_MLX_PAD_ROWS=1: pad 2-3 row affine 4-bit matmuls to 4.
+-var padSmallRows = os.Getenv("OLLAMA_MLX_PAD_ROWS") == "1"
++// OLLAMA_MLX_PAD_ROWS=3 pads only 3 rows: in a chained forward 2 rows cost
++// less than 4 (bench/qmv_chain.py, MLX 0.32.5).
++var padSmallRows = os.Getenv("OLLAMA_MLX_PAD_ROWS") == "1" || padOnlyThree
++var padOnlyThree = os.Getenv("OLLAMA_MLX_PAD_ROWS") == "3"
+ 
+ func (ql *QuantizedLinear) matmul(x, globalScale *mlx.Array) *mlx.Array {
+ 	var shape []int
+@@ -100,7 +103,7 @@ func (ql *QuantizedLinear) matmul(x, globalScale *mlx.Array) *mlx.Array {
+ 	rows := 0
+ 	var lead []int
+ 	if padSmallRows && ql.Mode == "affine" && ql.Bits == 4 {
+-		if n := x.Size() / x.Dim(-1); n == 2 || n == 3 {
++		if n := x.Size() / x.Dim(-1); n == 3 || (n == 2 && !padOnlyThree) {
+ 			rows, lead = n, x.Dims()
+ 			x = mlx.PadConstant(x.Reshape(n, lead[len(lead)-1]), []int{0}, []int{0}, []int{4 - n})
+ 		}
+diff --git a/mlxrunner/speculate.go b/mlxrunner/speculate.go
+index dff0bd8..374683f 100644
+--- a/mlxrunner/speculate.go
++++ b/mlxrunner/speculate.go
+@@ -373,13 +373,19 @@ func (st *speculativeDecoder) close() {
+ type draftCandidates struct {
+ 	tokens *mlx.Array
+ 	dist   sampler.Distribution
++	// alt is the draft's second choice per position (OLLAMA_MLX_ALT_STATS=1).
++	alt *mlx.Array
+ }
+ 
+ func (c *draftCandidates) Arrays() []*mlx.Array {
+ 	if c == nil {
+ 		return nil
+ 	}
+-	return append([]*mlx.Array{c.tokens}, c.dist.Arrays()...)
++	out := append([]*mlx.Array{c.tokens}, c.dist.Arrays()...)
++	if c.alt != nil {
++		out = append(out, c.alt)
++	}
++	return out
+ }
+ 
+ // scheduleSpeculation schedules per-token snapshots at offsets
+@@ -579,6 +585,9 @@ func (r *Runner) acceptDrafts(rounds []draftRound) []draftOutcome {
+ 		if !done {
+ 			if out.accepted < draftCount {
+ 				nextID = v.residualTokens.Ints()[out.accepted]
++				if round.candidates.alt != nil {
++					altStats.observe(out.accepted, nextID == int32(round.candidates.alt.Ints()[out.accepted]))
++				}
+ 			} else {
+ 				nextID = v.bonusToken.Int()
+ 			}
+-- 
+2.54.0 (Apple Git-157)
+
