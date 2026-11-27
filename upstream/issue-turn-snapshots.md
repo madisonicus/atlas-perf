@@ -19,4 +19,6 @@ A new chat with a 6.4k-token system prompt (tools, skills): 3.7 s now, 0.2 s wit
 
 **Proposed fix.** In `scheduleGenerationSnapshots`, also snapshot at the start of the last few turns (positions of the turn-start token, `<|im_start|>` for Qwen, `<start_of_turn>` for Gemma). About 40 lines, plus tests: `TestLastTurnStarts`, and `TestScenarioEditedPreviousTurn` on the hybrid-cache scenario harness (restore moves from the last periodic mark to the edited turn's start). Each extra snapshot is one recurrent state (about 150 MiB for this model). Branch, ready as a PR if you agree with the approach: https://github.com/madisonicus/ollama/tree/turn-start-snapshots
 
+Filed as https://github.com/ollama/ollama/issues/19952 (2026-11-27).
+
 Disclosure: I found, wrote and measured this with Claude (Anthropic) on my own Mac Studio, and reviewed it before filing.

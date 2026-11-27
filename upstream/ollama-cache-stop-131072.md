@@ -1,6 +1,6 @@
 # MLX runner: chat follow-ups on hybrid models re-read up to 8k tokens
 
-**Target:** ollama/ollama issues. Draft, not filed. Supersedes the earlier
+**Target:** ollama/ollama issues. Filed by Ben as [#19952](https://github.com/ollama/ollama/issues/19952) on 2026-11-27. Supersedes the earlier
 "restore stops at 131,071 tokens" draft: that was the 16th 8192-token mark.
 
 Ollama 0.40.18, MLX runner, Qwen3.8 27B (hybrid: Gated DeltaNet + attention),
