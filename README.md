@@ -91,6 +91,9 @@ and chat.
 | 2026-11-27 | Prompt reading (time to first word), Qwen3.8 27B, 8k and 30k prompts, 3 interleaved runs | uniform int4 1,738 / 1,553 tok/s vs official nvfp4 1,565 / 1,415 (**+11% / +10%**); MLX 0.32.5 vs stock: no difference | uniform int4 also cuts time to first word by about 9% |
 | 2026-11-27 | Prefill chunk size (patched `OLLAMA_MLX_PREFILL_CHUNK`; Ollama fixes 2048), uniform int4, pairwise vs default | 1024: 1,728 / 1,557; 4096: 1,738 / 1,565; 8192: 1,729 / 1,544 tok/s at 8k / 30k, all within 1% of 2048 | no effect on the dense model (the MLX counterpart of llama.cpp's `--ubatch-size`) |
 | 2026-11-27 | Memory growth under a game-like load (4 parallel 6-turn chats with a shared 6k system prompt, 10 min), Qwen3.6 35B-A3B | stock: runner grew 23 → 79 GB, 12.8 GB swap, 133 chats done. With patched `OLLAMA_MLX_MAX_ACTIVE_GB=40`: 42–47 GB, no swap growth, **134 chats done** | the saved prompt history grows into all memory the host reports free, ignoring other runners. A cap costs no throughput here |
+| 2026-11-27 | Where a speculative round spends its time (Qwen3.8 27B uniform int4, MTP, debug cost model and a per-block profiler) | plain step 17 ms; any draft round 26–29 ms. GPU busy 98–100% (powermetrics), so no host gap. Verify at 4–6 rows adds ~6 ms (MLP +3, linear attention +2.3, attention +0.9); each draft token ~1.2 ms, of which the 248k-row lm_head is the largest part | prose and chat accept only ~1.5 tokens per round (code 3.1), so the round overhead eats most of the draft gain |
+| 2026-11-27 | Small draft vocabulary: the MTP head proposes from N tokens only, full lm_head still verifies (patch 0004, `OLLAMA_MLX_DRAFT_VOCAB`, `_FILE`) | lowest 32k ids: prose +3%, chat −8%. Frequency-ranked 32k: prose +11%, code −17%. **Mixed list (low ids and ranked ids interleaved), 48k: prose +8%, code +5%, chat +3% over full-vocab MTP**. On the DFlash2 build: −3% avg (code −7%) | the draft head saves more on one-token MTP steps than on DFlash2, which unembeds 7 rows in one pass. Same idea as FR-Spec (2025). Best avg is still int4u + DFlash2 at 117 tok/s; MTP + 48k leads chat (95 vs 86) |
+| 2026-11-27 | MTP depth controller | one series stuck at depth 1 for 12+ requests (code fell to 114 tok/s); not reproduced in 41 more requests with probe backoff 512 or 16 | the probe backoff (up to 512 rounds) and acceptance EWMA (alpha 0.1) make recovery slow once a deep position looks bad; watching for a repro |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
@@ -147,6 +150,9 @@ Single stream: medians of 5 runs per prompt kind, temperature 0, thinking off.
    `OLLAMA_MLX_FUSE=1` (runner).
 3. Runner knobs: `OLLAMA_MLX_MAX_ACTIVE_GB` (memory cap per runner),
    `OLLAMA_MLX_PREFILL_CHUNK`, `OLLAMA_MLX_SNAPSHOT_GB`, `OLLAMA_MLX_DRAFT_MAX_ACTIVE`.
+4. `OLLAMA_MLX_DRAFT_VOCAB` and `OLLAMA_MLX_DRAFT_VOCAB_FILE` (small draft head,
+   token list from `bench/token_rank.py`), `OLLAMA_MLX_PROFILE=1` (time per block,
+   research only), `OLLAMA_MLX_PROBE_MAX` (depth probe backoff cap).
 
 Built Go-only on the Mac (`go build`), with the MLX libraries of the shipped
 Ollama next to the binary. No Xcode needed. To try MLX 0.32.5, copy

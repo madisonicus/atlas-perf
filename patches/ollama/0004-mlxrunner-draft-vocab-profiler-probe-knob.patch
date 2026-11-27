@@ -1,0 +1,344 @@
+From c027d1e2ef8c0065c659279afae22972a48a92bf Mon Sep 17 00:00:00 2001
+From: piargus <piargus@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 11:17:19 -0500
+Subject: [PATCH] mlxrunner: draft vocab subset, block profiler, probe backoff
+ knob
+
+---
+ mlxrunner/model/dflash/dflash.go       |   4 +
+ mlxrunner/model/qwen3_5/draft_vocab.go | 107 +++++++++++++++++++++++++
+ mlxrunner/model/qwen3_5/profile.go     |  73 +++++++++++++++++
+ mlxrunner/model/qwen3_5/qwen3_5.go     |  26 +++++-
+ mlxrunner/speculate_depth.go           |  12 ++-
+ 5 files changed, 219 insertions(+), 3 deletions(-)
+ create mode 100644 mlxrunner/model/qwen3_5/draft_vocab.go
+ create mode 100644 mlxrunner/model/qwen3_5/profile.go
+
+diff --git a/mlxrunner/model/dflash/dflash.go b/mlxrunner/model/dflash/dflash.go
+index 4327bbf..30269db 100644
+--- a/mlxrunner/model/dflash/dflash.go
++++ b/mlxrunner/model/dflash/dflash.go
+@@ -612,6 +612,10 @@ func (m *Model) Unembed(x *mlx.Array) *mlx.Array {
+ 	if m.LMHead != nil {
+ 		return m.LMHead.Forward(x)
+ 	}
++	// A target can offer a cheaper head for drafts (OLLAMA_MLX_DRAFT_VOCAB).
++	if d, ok := any(m.target).(interface{ DraftLogits(*mlx.Array) *mlx.Array }); ok {
++		return d.DraftLogits(x)
++	}
+ 	return m.target.RawLogits(x)
+ }
+ 
+diff --git a/mlxrunner/model/qwen3_5/draft_vocab.go b/mlxrunner/model/qwen3_5/draft_vocab.go
+new file mode 100644
+index 0000000..398f897
+--- /dev/null
++++ b/mlxrunner/model/qwen3_5/draft_vocab.go
+@@ -0,0 +1,107 @@
++package qwen3_5
++
++import (
++	"encoding/binary"
++	"math"
++	"os"
++	"strconv"
++	"sync"
++
++	"github.com/ollama/ollama/mlx"
++	"github.com/ollama/ollama/mlxrunner/nn"
++)
++
++// draftVocab is OLLAMA_MLX_DRAFT_VOCAB=N: the MTP head proposes only from
++// token ids [0, N). Its unembed reads N rows of lm_head instead of the full
++// vocabulary. Verification still uses the full head, so output does not
++// change; only draft acceptance can drop. Low ids are the early BPE merges,
++// the most frequent tokens.
++var draftVocab = func() int {
++	n, _ := strconv.Atoi(os.Getenv("OLLAMA_MLX_DRAFT_VOCAB"))
++	return n
++}()
++
++// draftVocabFile is OLLAMA_MLX_DRAFT_VOCAB_FILE: little-endian int32 token
++// ids, most frequent first. With it the draft head keeps the first N ids of
++// the file instead of ids [0, N).
++var draftVocabFile = os.Getenv("OLLAMA_MLX_DRAFT_VOCAB_FILE")
++
++func readRank(path string, n int) []int32 {
++	b, err := os.ReadFile(path)
++	if err != nil || len(b) < 4*n {
++		return nil
++	}
++	ids := make([]int32, n)
++	for i := range ids {
++		ids[i] = int32(binary.LittleEndian.Uint32(b[4*i:]))
++	}
++	return ids
++}
++
++type draftHead struct {
++	ids   *mlx.Array
++	once  sync.Once
++	head  *nn.QuantizedLinear
++	ninf  *mlx.Array
++	vocab int
++	held  *mlx.Scope
++}
++
++var draftHeads sync.Map // *Model -> *draftHead
++
++func (m *Model) draftUnembed(x *mlx.Array) *mlx.Array {
++	ql, ok := m.LMHead.(*nn.QuantizedLinear)
++	if draftVocab <= 0 || !ok || ql.Bias != nil || ql.GlobalScale != nil || draftVocab >= ql.Weight.Dim(0) {
++		return m.Unembed(x)
++	}
++	v, _ := draftHeads.LoadOrStore(m, &draftHead{})
++	dh := v.(*draftHead)
++	dh.once.Do(func() {
++		dh.held = mlx.NewScope()
++		n := draftVocab
++		dh.vocab = ql.Weight.Dim(0)
++		sl := func(a *mlx.Array) *mlx.Array {
++			if a == nil {
++				return nil
++			}
++			return a.Slice(mlx.Slice(0, n), mlx.Slice())
++		}
++		if draftVocabFile != "" {
++			if rank := readRank(draftVocabFile, n); rank != nil {
++				dh.ids = mlx.FromValues(rank, n)
++				sl = func(a *mlx.Array) *mlx.Array {
++					if a == nil {
++						return nil
++					}
++					return mlx.Take(a, dh.ids, 0)
++				}
++			}
++		}
++		dh.head = &nn.QuantizedLinear{Weight: sl(ql.Weight), Scales: sl(ql.Scales), QBiases: sl(ql.QBiases), GroupSize: ql.GroupSize, Bits: ql.Bits, Mode: ql.Mode}
++		dh.ninf = mlx.FromValue(float32(math.Inf(-1)))
++		keep := []*mlx.Array{dh.head.Weight, dh.head.Scales, dh.ninf}
++		if dh.ids != nil {
++			keep = append(keep, dh.ids)
++		}
++		if dh.head.QBiases != nil {
++			keep = append(keep, dh.head.QBiases)
++		}
++		mlx.Eval(keep...)
++		dh.held.Attach(keep...)
++	})
++	logits := dh.head.Forward(x)
++	if dh.ids != nil {
++		lead := logits.Dims()
++		rows := logits.Size() / draftVocab
++		flat := logits.Reshape(rows, draftVocab)
++		idx := mlx.BroadcastTo(dh.ids.AsType(mlx.DTypeInt32), int32(rows), int32(draftVocab))
++		base := mlx.AddScalar(mlx.Zeros(logits.DType(), rows, dh.vocab), float32(math.Inf(-1)))
++		lead[len(lead)-1] = dh.vocab
++		return base.PutAlongAxis(idx, flat, -1).Reshape(lead...)
++	}
++	last := logits.NumDims() - 1
++	return mlx.Pad(logits, []int{last}, []int{0}, []int{dh.vocab - draftVocab}, dh.ninf.AsType(logits.DType()), "constant")
++}
++
++// DraftLogits is the draft head for an external drafter such as DFlash2.
++func (m *Model) DraftLogits(x *mlx.Array) *mlx.Array { return m.draftUnembed(x) }
+diff --git a/mlxrunner/model/qwen3_5/profile.go b/mlxrunner/model/qwen3_5/profile.go
+new file mode 100644
+index 0000000..8a4e9ce
+--- /dev/null
++++ b/mlxrunner/model/qwen3_5/profile.go
+@@ -0,0 +1,73 @@
++package qwen3_5
++
++import (
++	"fmt"
++	"log/slog"
++	"os"
++	"sort"
++	"sync"
++	"time"
++
++	"github.com/ollama/ollama/mlx"
++)
++
++// OLLAMA_MLX_PROFILE=1 syncs the GPU after each block and sums wall time by
++// block kind and forward width. Research only: the syncs slow decode.
++var profileOn = os.Getenv("OLLAMA_MLX_PROFILE") == "1"
++
++type profKey struct {
++	kind string
++	L    int32
++}
++
++var (
++	profMu    sync.Mutex
++	profSum   = map[profKey]time.Duration{}
++	profCount = map[profKey]int{}
++	profCalls int
++)
++
++func profMark(kind string, L int32, start time.Time, outs ...*mlx.Array) time.Time {
++	if !profileOn {
++		return start
++	}
++	mlx.Eval(outs...)
++	now := time.Now()
++	profMu.Lock()
++	k := profKey{kind, L}
++	profSum[k] += now.Sub(start)
++	profCount[k]++
++	profMu.Unlock()
++	return now
++}
++
++func profForwardDone() {
++	if !profileOn {
++		return
++	}
++	profMu.Lock()
++	defer profMu.Unlock()
++	profCalls++
++	if profCalls%200 != 0 {
++		return
++	}
++	keys := make([]profKey, 0, len(profSum))
++	for k := range profSum {
++		keys = append(keys, k)
++	}
++	sort.Slice(keys, func(i, j int) bool {
++		if keys[i].L != keys[j].L {
++			return keys[i].L < keys[j].L
++		}
++		return keys[i].kind < keys[j].kind
++	})
++	for _, k := range keys {
++		fwd := profCount[profKey{"forward", k.L}]
++		if fwd == 0 {
++			fwd = 1
++		}
++		slog.Info("mlx profile", "L", k.L, "kind", k.kind, "ms_per_forward", fmt.Sprintf("%.3f", float64(profSum[k].Microseconds())/1000/float64(fwd)), "calls", profCount[k])
++	}
++	profSum = map[profKey]time.Duration{}
++	profCount = map[profKey]int{}
++}
+diff --git a/mlxrunner/model/qwen3_5/qwen3_5.go b/mlxrunner/model/qwen3_5/qwen3_5.go
+index d3346ee..d7684fd 100644
+--- a/mlxrunner/model/qwen3_5/qwen3_5.go
++++ b/mlxrunner/model/qwen3_5/qwen3_5.go
+@@ -9,6 +9,7 @@ import (
+ 	"os"
+ 	"slices"
+ 	"strings"
++	"time"
+ 
+ 	"github.com/ollama/ollama/mlx"
+ 	"github.com/ollama/ollama/mlxrunner/batch"
+@@ -1292,15 +1293,20 @@ func (m *SparseMoE) Forward(x *mlx.Array, cfg *Config) *mlx.Array {
+ 
+ func (l *Layer) Forward(x *mlx.Array, b *batch.Batch, c cache.Layer, positions *mlx.Array, B, L int32, cfg *Config, mropeCos, mropeSin *mlx.Array) *mlx.Array {
+ 	var r *mlx.Array
++	t0 := time.Now()
+ 	normed := l.InputNorm.Forward(x, cfg.RMSNormEps)
+ 	if l.IsLinear {
+ 		r = l.Linear.Forward(normed, b, c, B, L, cfg)
++		t0 = profMark("gdn", L, t0, r)
+ 	} else {
+ 		r = l.FullAttn.Forward(normed, b, c, positions, B, L, cfg, mropeCos, mropeSin)
++		t0 = profMark("attn", L, t0, r)
+ 	}
+ 	h := mlx.Add(x, r)
+ 	r = l.MLP.Forward(l.PostAttentionNorm.Forward(h, cfg.RMSNormEps), cfg)
+-	return mlx.Add(h, r)
++	out := mlx.Add(h, r)
++	profMark("mlp", L, t0, out)
++	return out
+ }
+ 
+ func (m *Model) Forward(b *batch.Batch, caches []cache.Layer) (hidden, auxHidden *mlx.Array) {
+@@ -1320,6 +1326,11 @@ func (m *Model) Forward(b *batch.Batch, caches []cache.Layer) (hidden, auxHidden
+ 		mropeCos, mropeSin = mropeCosSin(m.Config, mp, L)
+ 	}
+ 
++	tf := time.Now()
++	if profileOn {
++		mlx.Eval(h)
++		tf = profMark("embed", L, tf, h)
++	}
+ 	var features []*mlx.Array
+ 	for i, layer := range m.Layers {
+ 		var c cache.Layer
+@@ -1332,6 +1343,10 @@ func (m *Model) Forward(b *batch.Batch, caches []cache.Layer) (hidden, auxHidden
+ 		}
+ 	}
+ 	out := m.Norm.Forward(h, m.RMSNormEps)
++	if profileOn {
++		profMark("forward", L, tf, out)
++		profForwardDone()
++	}
+ 	if len(features) > 0 {
+ 		return out, mlx.Concatenate(features, -1)
+ 	}
+@@ -1339,6 +1354,13 @@ func (m *Model) Forward(b *batch.Batch, caches []cache.Layer) (hidden, auxHidden
+ }
+ 
+ func (m *Model) Unembed(x *mlx.Array) *mlx.Array {
++	if profileOn {
++		t := time.Now()
++		mlx.Eval(x)
++		out := m.LMHead.Forward(x)
++		profMark("unembed", int32(x.Dims()[len(x.Dims())-2]), t, out)
++		return out
++	}
+ 	return m.LMHead.Forward(x)
+ }
+ 
+@@ -1357,7 +1379,7 @@ func (m *mtpDraft) NewCaches() []cache.Cache {
+ // LoadWeights does nothing: an inline head's weights load with the target's.
+ func (m *mtpDraft) LoadWeights(map[string]*mlx.Array) error { return nil }
+ 
+-func (m *mtpDraft) Unembed(x *mlx.Array) *mlx.Array { return (*Model)(m).Unembed(x) }
++func (m *mtpDraft) Unembed(x *mlx.Array) *mlx.Array { return (*Model)(m).draftUnembed(x) }
+ 
+ // SelfDraft returns the model's drafting view, or nil when no MTP head was
+ // loaded. The methods exist either way, so this is what decides availability.
+diff --git a/mlxrunner/speculate_depth.go b/mlxrunner/speculate_depth.go
+index 914e96f..ab63453 100644
+--- a/mlxrunner/speculate_depth.go
++++ b/mlxrunner/speculate_depth.go
+@@ -2,7 +2,9 @@ package mlxrunner
+ 
+ import (
+ 	"fmt"
++	"os"
+ 	"slices"
++	"strconv"
+ 	"strings"
+ 	"time"
+ )
+@@ -17,6 +19,14 @@ const depthProbeInterval = 4
+ // plain decode speed, never below — for fewer probes.
+ const depthProbeIntervalMax = 512
+ 
++// probeIntervalMax is depthProbeIntervalMax, or OLLAMA_MLX_PROBE_MAX when set.
++var probeIntervalMax = func() int {
++	if n, err := strconv.Atoi(os.Getenv("OLLAMA_MLX_PROBE_MAX")); err == nil && n >= depthProbeInterval {
++		return n
++	}
++	return depthProbeIntervalMax
++}()
++
+ // depthController drafts argmax_N EV(N) where EV(N) = committed(N) / cost(N), over
+ // depths from plain decode up to one past the measured acceptance frontier,
+ // bounded by the drafter's capacity. A probe can observe a complete block.
+@@ -109,7 +119,7 @@ func (c *depthController) nextFor(limit int, expected func(int) float64) (depth
+ 		c.probeSince = 0
+ 		c.lastSelected = sel
+ 	} else if c.probed {
+-		maxInterval := depthProbeIntervalMax
++		maxInterval := probeIntervalMax
+ 		if c.block {
+ 			// A transition from reasoning to predictable code can make a
+ 			// whole block profitable before the first position has been relearnt.
+-- 
+2.54.0 (Apple Git-157)
+

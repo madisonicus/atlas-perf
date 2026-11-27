@@ -1,0 +1,54 @@
+{"at": "2026-11-27T11:13:53", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "prose", "tok_s": 99.7}
+{"at": "2026-11-27T11:13:57", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 100.0}
+{"at": "2026-11-27T11:14:01", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 101.8}
+{"at": "2026-11-27T11:14:03", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "code", "tok_s": 165.7}
+{"at": "2026-11-27T11:14:06", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 156.2}
+{"at": "2026-11-27T11:14:08", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 171.3}
+{"at": "2026-11-27T11:14:13", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "chat", "tok_s": 89.5}
+{"at": "2026-11-27T11:14:17", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 87.3}
+{"at": "2026-11-27T11:14:21", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 100.3}
+{"at": "2026-11-27T11:14:25", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 102.4}
+{"at": "2026-11-27T11:14:29", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 103.5}
+{"at": "2026-11-27T11:14:33", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "prose", "tok_s": 101.6}
+{"at": "2026-11-27T11:14:36", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 147.8}
+{"at": "2026-11-27T11:14:38", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 156.1}
+{"at": "2026-11-27T11:14:41", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "code", "tok_s": 167.5}
+{"at": "2026-11-27T11:14:45", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 96.4}
+{"at": "2026-11-27T11:14:50", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 88.8}
+{"at": "2026-11-27T11:14:54", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "chat", "tok_s": 89.3}
+{"at": "2026-11-27T11:14:58", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "prose", "tok_s": 99.4}
+{"at": "2026-11-27T11:15:02", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 101.0}
+{"at": "2026-11-27T11:15:06", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 106.6}
+{"at": "2026-11-27T11:15:08", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "code", "tok_s": 167.3}
+{"at": "2026-11-27T11:15:11", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 155.8}
+{"at": "2026-11-27T11:15:14", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 145.4}
+{"at": "2026-11-27T11:15:18", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "chat", "tok_s": 85.5}
+{"at": "2026-11-27T11:15:23", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 84.4}
+{"at": "2026-11-27T11:15:27", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 93.7}
+{"at": "2026-11-27T11:15:31", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 104.9}
+{"at": "2026-11-27T11:15:35", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 101.1}
+{"at": "2026-11-27T11:15:39", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "prose", "tok_s": 99.3}
+{"at": "2026-11-27T11:15:42", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 137.0}
+{"at": "2026-11-27T11:15:45", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 155.8}
+{"at": "2026-11-27T11:15:47", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "code", "tok_s": 167.3}
+{"at": "2026-11-27T11:15:51", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 91.4}
+{"at": "2026-11-27T11:15:56", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 84.5}
+{"at": "2026-11-27T11:16:01", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "chat", "tok_s": 85.4}
+{"at": "2026-11-27T11:16:05", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "prose", "tok_s": 99.5}
+{"at": "2026-11-27T11:16:09", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 101.1}
+{"at": "2026-11-27T11:16:13", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 103.5}
+{"at": "2026-11-27T11:16:15", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "code", "tok_s": 167.1}
+{"at": "2026-11-27T11:16:18", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 155.8}
+{"at": "2026-11-27T11:16:21", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 143.1}
+{"at": "2026-11-27T11:16:25", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "chat", "tok_s": 85.6}
+{"at": "2026-11-27T11:16:30", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 84.5}
+{"at": "2026-11-27T11:16:34", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 90.9}
+{"at": "2026-11-27T11:16:38", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 102.9}
+{"at": "2026-11-27T11:16:42", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "prose", "tok_s": 101.1}
+{"at": "2026-11-27T11:16:46", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "prose", "tok_s": 99.3}
+{"at": "2026-11-27T11:16:49", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 140.6}
+{"at": "2026-11-27T11:16:52", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "code", "tok_s": 155.8}
+{"at": "2026-11-27T11:16:54", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "code", "tok_s": 167.1}
+{"at": "2026-11-27T11:16:58", "arm": "mtp-m48k", "model": "qwen3.8:27b-int4u", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 96.2}
+{"at": "2026-11-27T11:17:03", "arm": "d-m48k", "model": "qwen3.8:27b-int4u-dflash2", "env": {"OLLAMA_MLX_DRAFT_VOCAB": "49152", "OLLAMA_MLX_DRAFT_VOCAB_FILE": "/Users/atlas/lab-data/qwen3.8-token-mix.bin"}, "kind": "chat", "tok_s": 84.4}
+{"at": "2026-11-27T11:17:08", "arm": "d-full", "model": "qwen3.8:27b-int4u-dflash2", "env": {}, "kind": "chat", "tok_s": 85.4}
