@@ -76,6 +76,7 @@ and chat.
 | 2026-11-27 | Gemma 4 31B: uniform int4 from Google's QAT weights + its assistant draft (MLX 0.32.5) | **91.6 vs 80.1 (+14%)**; prose 85.8, code 118.9 (+23%), chat 70.0 | the uniform 4-bit lever carries over to a second model family |
 | 2026-11-27 | Gemma 4 31B: same with uniform nvfp4 | 84.9 (+6%) | affine int4 beats nvfp4 here too |
 | 2026-11-27 | Quality, Gemma int4 QAT | 19/20 tool calls (official 19/20); blind tasks 0.90 vs 0.87 official | QAT weights hold quality at 4 bits |
+| 2026-11-27 | Long chat, 139k tokens, follow-up turn | 131,071 tokens from cache, 13.1 s to first word, with the default 8 GiB snapshot budget and with 32 GiB (patched `OLLAMA_MLX_SNAPSHOT_GB`) | the stop at 2^17 − 1 tokens is not the snapshot budget; cause still open |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
