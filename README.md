@@ -27,7 +27,7 @@ round near 3.3 tokens; +50% needs about 3.8 (see the results log and the
 
 Upstream: the turn-start snapshot fix is filed as
 [ollama#19952](https://github.com/ollama/ollama/issues/19952), with a PR
-branch ready. Progress posts: [2026-11-27, day one](posts/2026-11-27-day-one.md).
+branch ready. Comments for PRs #19745 and #19769 are in `upstream/`. Progress posts: [2026-11-27, day one](posts/2026-11-27-day-one.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/models-dark.svg">
