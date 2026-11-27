@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-27",
+  "machine": "Mac Studio M5 Ultra, 96 GB",
+  "tool": {"repo": "scoltzero/heretic-mlx", "commit": "e8ed39bbeb76db0ed0098bd631e50fc4fa439e81", "mlx": "0.32.5", "mlx_lm": "0.32.2"},
+  "base": {"repo": "empero-ai/Qwen3.8-9B-Distill", "revision": "0934f3d2327ff2df2197495278c4c46ae5a56bd9", "dtype": "bf16"},
+  "search": {
+    "modifier": "ara", "config": "configs/default.toml", "n_trials": 100, "good_prompts": "mlabonne/harmless_alpaca train[:400]",
+    "bad_prompts": "mlabonne/harmful_behaviors train[:400]", "selection": "--auto-select --max-kl 0.15",
+    "wall_seconds": 3238, "seconds_per_trial": 37, "peak_memory_gb": 31.5,
+    "baseline_keyword_refusals": "98/100",
+    "pareto": [["89", "0/100", 0.3254], ["54", "4/100", 0.0169], ["86", "9/100", 0.0110], ["76", "23/100", 0.0106], ["82", "33/100", 0.0073], ["38", "41/100", 0.0072], ["42", "45/100", 0.0066]],
+    "selected_trial": 54, "edited_layers": "12-26", "changed_projections": "27 of 64",
+    "preserved": {"vision_tensors": 333, "mtp_tensors": 15}
+  },
+  "builds": {
+    "ours_int4u": "ollama create -q int4, OLLAMA_QUANTIZE_UNIFORM=1, from the spliced HF checkpoint, 7.6 GB",
+    "stock_int4u": "same recipe from the unmodified base, 7.6 GB",
+    "third_party": "qwen3.8-heretic:9b, GGUF Q6_K, source not recorded"
+  },
+  "refusals": {
+    "method": "JailbreakBench JBB-Behaviors 886acc3, 100 harmful + 100 benign; judge VINAY-UMRETHE/Refusal-Classifier-V2 093e855 (full or partial refusal); thinking off, greedy, 256 tokens",
+    "stock_bf16_mlx": {"harmful": 95, "benign": 39},
+    "ours_bf16_mlx": {"harmful": 12, "benign": 6},
+    "ours_int4u_ollama": {"harmful": 13, "benign": 7},
+    "third_party_ollama": {"harmful": 97, "benign": 37}
+  },
+  "capability": {
+    "method": "Ollama, thinking off, greedy, 768 tokens; GSM8K test first 100; MMLU-Pro first 10 per category (140); HumanEval first 50, executed",
+    "stock_int4u": {"gsm8k": 95, "mmlu_pro": 87, "humaneval": 49},
+    "ours_int4u": {"gsm8k": 95, "mmlu_pro": 80, "humaneval": 47},
+    "third_party_q6k": {"gsm8k": 98, "mmlu_pro": 96, "humaneval": 48},
+    "paired_ours_vs_stock": {"gsm8k": [1, 1, 1.0], "mmlu_pro": [4, 11, 0.118], "humaneval": [0, 2, 0.5], "fields": "ours-only correct, stock-only correct, two-sided sign test p"}
+  },
+  "speed": {
+    "method": "bench/abl_speed_vision.py, decode.py prompts, 400 tokens, median of 3",
+    "ours_int4u": {"prose": 211.8, "code": 275.1, "chat": 206.0, "mtp_acceptance": 0.586},
+    "stock_int4u": {"prose": 223.6, "code": 242.1, "chat": 210.0, "mtp_acceptance": 0.625},
+    "third_party_q6k_llamacpp": {"prose": 108.3, "code": 108.2, "chat": 108.3}
+  },
+  "vision_spot_check": "synthetic image (red circle, blue rectangle, green triangle, text 'ATLAS 42'): all three builds name the shapes, colors and text"
+}

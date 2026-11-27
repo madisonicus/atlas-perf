@@ -27,7 +27,7 @@ round near 3.3 tokens; +50% needs about 3.8 (see the results log and the
 
 Upstream: the turn-start snapshot fix is filed as
 [ollama#19952](https://github.com/ollama/ollama/issues/19952), with a PR
-branch ready. Comments for PRs #19745 and #19769 are in `upstream/`. Progress posts: [2026-11-27, day one](posts/2026-11-27-day-one.md).
+branch ready. Comments for PRs #19745 and #19769 are in `upstream/`. Progress posts: [2026-11-27, day one](posts/2026-11-27-day-one.md), [2026-11-27, our own abliterated 9B](posts/2026-11-27-own-abliteration-9b.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/models-dark.svg">
@@ -131,6 +131,10 @@ and chat.
 | 2026-11-27 | **Priority tiers** (patch 0010, `OLLAMA_PRIORITY=1`): options.priority 0 batch, 1 chat, 2 voice; while a higher tier runs, every MLX runner pauses lower tiers (a 3 s lease from the server, renewed each second). A tier counts only with `priority_key` equal to a key file. `bench/qos.py`, 3 background streams, median of 3–4 | owner chat, same model: **49 → 100 tok/s** (idle 98.6); background on another model (Qwen3.6 35B-A3B): **70 → 96**; voice tier over 3 chat-tier streams: 96.8; wrong or no key: 49–55 (no priority) | meets "owner within 15% of idle during batch work" for MLX models. Open WebUI sends tier 1 through a global filter. Not covered: llama.cpp models, and a request that waits for a free slot. In production |
 | 2026-11-27 | Abliterated Qwen3.8 27B (Heretic RVN weights + grafted MTP head): uniform int4 builds vs the nvfp4 build (`qwen3.8-heretic:27b-mlx`), prod server, 2 interleaved rounds | int4 + DFlash2 draft: **42 tok/s** avg (prose 33, chat 32); int4 + MTP: **60**; nvfp4 + MTP: **66–74** (prose 65, code 73–97, chat 60). All: 0 of 4 refusals, tool call OK | the uniform-int4 lever does not carry over: the DFlash2 draft was trained on the base model and fits the Heretic weights poorly, and the int4 MTP head does worse than its nvfp4 copy. Kept the nvfp4 build; both int4 builds deleted |
 | 2026-11-27 | New-chat first word in Open WebUI (prod request log with prompt fingerprints: hashes of the first 64…16,384 characters, no text) | new saved chat after a saved chat: 6,359 of 6,422 tokens from cache, **first word 0.2 s**. First saved chat after a Temporary Chat: 3 tokens from cache, **3.7 s** | the 6.4k-token system prompt (tools, skills) is cached across chats. Temporary Chats send no web-search tool, so the prompt differs after ~4k characters, before any saved recurrent state, and is read again once. Left as is |
+| 2026-11-27 | **Own abliteration, 9B pilot** (heretic-mlx `e8ed39b`, ARA, 100 trials, 400/400 prompts, on `empero-ai/Qwen3.8-9B-Distill` bf16) | 54 min, 37 s/trial, peak 31.5 GB; selected trial: keyword refusals 4/100 (base 98/100), KL 0.017 | `abliteration/`, `reviews/2026-11-27-heretic-mlx-code-review.md` |
+| 2026-11-27 | Abliteration 9B: refusals judged by a classifier (JailbreakBench 100 harmful / 100 benign, Refusal-Classifier-V2, thinking off) | stock 95 / 39; **ours bf16 12 / 6; ours int4u 13 / 7**; third-party `qwen3.8-heretic:9b` (GGUF Q6_K) 97 / 37 | `bench/refusal_eval.py`; the third-party build refuses as much as stock with thinking off |
+| 2026-11-27 | Abliteration 9B: capability screen, int4u through Ollama (GSM8K 100, MMLU-Pro 140, HumanEval 50) | stock 95 / 87 / 49; **ours 95 / 80 / 47**; third-party Q6_K 98 / 96 / 48 | `bench/capability_eval.py`; ours vs stock paired: MMLU-Pro 4 vs 11 questions, p = 0.12, not proven |
+| 2026-11-27 | Abliteration 9B: decode and MTP, int4u, 3 runs per kind | ours 211.8 / 275.1 / 206.0 tok/s vs stock 223.6 / 242.1 / 210.0; MTP acceptance 0.586 vs 0.625; vision spot check correct on both | `bench/abl_speed_vision.py`; vision and MTP tensors kept by the export |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
