@@ -1,0 +1,44 @@
+From b60c781031ab5d67e7f813a6a93222f71b38a4d5 Mon Sep 17 00:00:00 2001
+From: piargus <piargus@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 13:33:12 -0500
+Subject: [PATCH] mlxrunner: OLLAMA_KV_CACHE_WRITE_DELAY makes the disk cache
+ write-back
+
+---
+ mlxrunner/cache_policy.go | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/mlxrunner/cache_policy.go b/mlxrunner/cache_policy.go
+index 8dcc11bc..5b5d3cb8 100644
+--- a/mlxrunner/cache_policy.go
++++ b/mlxrunner/cache_policy.go
+@@ -30,9 +30,6 @@ const (
+ 	// Balanced returns saved idle RAM after this interval, independently of
+ 	// model keep_alive. Lean releases it immediately; warm waits for pressure.
+ 	checkpointIdleAge = 5 * time.Minute
+-	// Coalesce rapid next turns before copying tensors. Shutdown and urgent
+-	// pressure bypass this delay so pending saves can finish promptly.
+-	checkpointWriteDelay = 100 * time.Millisecond
+ 	// Avoid repeated disk work after a failure and excessive timestamp writes.
+ 	checkpointRetryInterval = time.Minute
+ 	checkpointTouchInterval = time.Minute
+@@ -82,3 +79,16 @@ func loadCachePolicy() (cachePolicy, bool, error) {
+ 	}
+ 	return p, true, nil
+ }
++
++// checkpointWriteDelay coalesces rapid next turns before copying tensors.
++// Shutdown, unload and urgent memory pressure bypass it, so pending saves
++// still finish. OLLAMA_KV_CACHE_WRITE_DELAY (a Go duration such as 10m)
++// makes the disk cache write-back: a conversation is written once it has
++// been idle that long, or when its memory is needed, not after every turn
++// (each turn of a 15k-token chat wrote 2.2 GB on an M5 Ultra).
++var checkpointWriteDelay = func() time.Duration {
++	if d, err := time.ParseDuration(os.Getenv("OLLAMA_KV_CACHE_WRITE_DELAY")); err == nil && d >= 0 {
++		return d
++	}
++	return 100 * time.Millisecond
++}()
+-- 
+2.54.0 (Apple Git-157)
+
