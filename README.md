@@ -26,8 +26,10 @@ still under test.
 
 **Code:** our Ollama patches live on branch
 [`atlas-dev` of madisonicus/ollama](https://github.com/madisonicus/ollama/tree/atlas-dev)
-(on top of v0.40.18). `patches/` keeps a copy of each. Since 2026-11-27 our
-own atlas runs this build in production.
+(on top of v0.40.18), and branch
+[`atlas-next`](https://github.com/madisonicus/ollama/tree/atlas-next): upstream main
+plus open PR #19769 plus our patches, which atlas runs in production since
+2026-11-27. `patches/` keeps a copy of each of ours.
 
 ## Scope
 
@@ -104,6 +106,7 @@ and chat.
 | 2026-11-27 | Draft second choice at a rejection, 6 varied prompts per kind (`OLLAMA_MLX_ALT_STATS=1`, `bench/alt.py`) | at the first draft position the target token was the draft's second choice in **53% (prose) and 44% (chat)** of rejections; 39% and 35% over all positions | the target token after a first-position rejection is already free, so a second branch gains only the token after it: about +0.11 tokens per round on prose (21% of rounds reject at position 1, times 53%), near +4%. Small for the work a forked recurrent state needs. A better-trained draft is the larger lever |
 | 2026-11-27 | Self-distill the MTP head (`mtp/`): 740 of the target's own greedy chat answers (UltraChat prompts, ~300k tokens), labels = the 4-bit target's argmax, fp32 AdamW, 2 epochs, lr 1e-6 | held-out step-1 agreement **80.66% → 80.79%** (loss 0.653 → 0.630); train loss fell to ~0.42. lr 2e-5 and 3e-6 on smaller data made it worse (72%, 81.3% from 82.1%) | negative at this scale: Qwen's head already fits the model's own chat output, and the small gain does not pay for a new package. Draft quality needs a different idea (a larger or tree draft), not a fine-tune |
 | 2026-11-27 | **Follow-up turn, chat client flow** (history unchanged except the date stamp leaves the previous user message), Qwen3.8 27B int4u, `bench/turns_ab.py`. Stock vs patch 0006 (`OLLAMA_MLX_TURN_SNAPSHOTS=1`: also save state at the start of the last chat turns) | first word at 3.6k / 10k / 21k / 42k / 70k / 139k tokens: stock **2.02 / 1.45 / 3.13 / 0.73 / 4.21 / 12.5 s**; patched **0.11 / 0.12 / 0.15 / 0.19 / 0.25 / 0.46 s** | a hybrid model cannot rewind its recurrent state, so a prompt that diverges inside the previous turn restores to the last 8192-token mark (or 0) and reads the rest again. This was the "131,071 stop": not a 2^17 limit, only the 16th mark. 10–30x faster follow-ups |
+| 2026-11-27 | Open upstream PR [#19769](https://github.com/ollama/ollama/pull/19769) (batch DFlash2 drafts and recurrent replay across requests), int4u + DFlash2, total tok/s, median of 3 (`bench/conc.py`) | 1 client 98.2 → 98.1; **4 clients 184 → 203 (+10%)**; **8 clients 168 → 265 (+58%)** | the PR's own M5 Max numbers hold on M5 Ultra. Without it, 8 clients were slower than 4. Now in production on atlas with our patches (branch `atlas-next`) |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
