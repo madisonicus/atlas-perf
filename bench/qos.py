@@ -4,20 +4,20 @@ Foreground: streamed chat, 400 tokens; reports first word (s) and tok/s.
 Background: endless 400-token chats while the foreground runs."""
 import json, os, subprocess, sys, threading, time, statistics, urllib.request
 binp, port, par, model = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-BGS = [int(x) for x in sys.argv[5].split(",")]; REPS = int(sys.argv[6])
+BGS = [int(x) for x in sys.argv[5].split(",")]; REPS = int(sys.argv[6]); BGMODEL = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] != "-" else None; FGTIER=int(os.environ.get("FGTIER","1")); BGTIER=int(os.environ.get("BGTIER","0"))
 FG = ["Explain in about 300 words how ZFS snapshots work and why they are cheap.",
       "My D&D group meets Saturday. Suggest three short side quests in Vallaki for level 5 characters."]
 BG = "Write a detailed 400-word description of a wildlife photo of a red fox in snow, then list 20 keywords."
 env = dict(os.environ, OLLAMA_KEEP_ALIVE="-1", OLLAMA_CONTEXT_LENGTH="65536", OLLAMA_NUM_PARALLEL=par,
-           OLLAMA_HOST=f"127.0.0.1:{port}", OLLAMA_KV_CACHE_SIZE="0", OLLAMA_MLX_TURN_SNAPSHOTS="1")
+           OLLAMA_HOST=f"127.0.0.1:{port}", OLLAMA_KV_CACHE_SIZE="0", OLLAMA_MLX_TURN_SNAPSHOTS="1", OLLAMA_PRIORITY=os.environ.get("PRIO","1"), OLLAMA_PRIORITY_KEY_FILE=os.path.expanduser("~/.config/ollama-priority.key"))
 pr = subprocess.Popen([binp, "serve"], env=env, cwd=os.path.dirname(binp), stdout=open("/tmp/qos.log", "w"), stderr=subprocess.STDOUT)
 time.sleep(6)
 U = f"http://127.0.0.1:{port}/api/chat"
-def req(p, stream):
-    b = {"model": model, "stream": stream, "think": False, "messages": [{"role": "user", "content": p}], "options": {"num_predict": 400, "temperature": 0.7}}
+def req(p, stream, prio=0, mdl=None):
+    b = {"model": mdl or model, "stream": stream, "think": False, "messages": [{"role": "user", "content": p}], "options": {"num_predict": 400, "temperature": 0.7, "priority": prio, "priority_key": os.environ.get("KEY","")}} if prio else {"model": mdl or model, "stream": stream, "think": False, "messages": [{"role": "user", "content": p}], "options": {"num_predict": 400, "temperature": 0.7, "priority": BGTIER, "priority_key": os.environ.get("KEY","")}}
     return urllib.request.urlopen(urllib.request.Request(U, json.dumps(b).encode()), timeout=1800)
 def fg(p):
-    t0 = time.time(); first = None; n = 0; r = req(p, True)
+    t0 = time.time(); first = None; n = 0; r = req(p, True, FGTIER)
     for line in r:
         d = json.loads(line)
         if d.get("message", {}).get("content") and first is None: first = time.time() - t0
@@ -26,10 +26,11 @@ def fg(p):
 stop = False
 def bg():
     while not stop:
-        try: req(BG, False).read()
+        try: req(BG, False, 0, BGMODEL).read()
         except Exception: time.sleep(1)
 try:
     req("Say OK.", False).read()
+    if BGMODEL: req("Say OK.", False, 0, BGMODEL).read()
     for nbg in BGS:
         stop = False
         ths = [threading.Thread(target=bg, daemon=True) for _ in range(nbg)]

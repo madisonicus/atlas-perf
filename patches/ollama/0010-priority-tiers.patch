@@ -1,0 +1,415 @@
+From c61de62065cecc033624f118bec24d4191cda447 Mon Sep 17 00:00:00 2001
+From: piargus <piargus@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 14:30:26 -0500
+Subject: [PATCH 3/4] Priority tiers: OLLAMA_PRIORITY pauses lower tiers in
+ every MLX runner; tier honored only with the key file
+
+---
+ api/types.go           |   8 ++-
+ mlxrunner/client.go    |  16 +++++
+ mlxrunner/owner.go     |  72 ++++++++++++++++++++
+ mlxrunner/scheduler.go |   7 ++
+ mlxrunner/server.go    |   1 +
+ server/owner.go        | 147 +++++++++++++++++++++++++++++++++++++++++
+ server/routes.go       |   7 ++
+ 7 files changed, 257 insertions(+), 1 deletion(-)
+ create mode 100644 mlxrunner/owner.go
+ create mode 100644 server/owner.go
+
+diff --git a/api/types.go b/api/types.go
+index f72883bc..adcf9c96 100644
+--- a/api/types.go
++++ b/api/types.go
+@@ -702,7 +702,13 @@ type Options struct {
+ 	// NoCachePersist keeps this request's conversation state out of the MLX
+ 	// disk cache (OLLAMA_KV_CACHE_*). For chats that must leave nothing on
+ 	// disk, such as a client's temporary chats. Memory caching is unchanged.
+-	NoCachePersist   bool     `json:"no_cache_persist,omitempty"`
++	NoCachePersist bool `json:"no_cache_persist,omitempty"`
++	// Priority > 0 marks an interactive request (OLLAMA_PRIORITY=1), 1 = chat,
++	// 2 = voice: while one runs, MLX runners pause requests of a lower tier.
++	// Honored only with PriorityKey equal to the server's key file, so no
++	// caller can raise its own tier; the server clears both before the runner.
++	Priority         int      `json:"priority,omitempty"`
++	PriorityKey      string   `json:"priority_key,omitempty"`
+ 	TopK             int      `json:"top_k,omitempty"`
+ 	TopP             float32  `json:"top_p,omitempty"`
+ 	MinP             float32  `json:"min_p,omitempty"`
+diff --git a/mlxrunner/client.go b/mlxrunner/client.go
+index 9aaa1023..23421f7f 100644
+--- a/mlxrunner/client.go
++++ b/mlxrunner/client.go
+@@ -583,6 +583,22 @@ func (c *Client) EmbeddingDimensions() []int {
+ }
+ 
+ // Ping implements llm.LlamaServer.
++// SetOwnerLease tells the runner that a priority request runs on this server
++// for the next seconds (0 ends it). See OLLAMA_PRIORITY.
++func (c *Client) SetOwnerLease(ctx context.Context, seconds float64, tier int) error {
++	reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1/owner", c.port)
++	req, err := http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(fmt.Sprintf(`{"seconds":%g,"tier":%d}`, seconds, tier)))
++	if err != nil {
++		return err
++	}
++	resp, err := c.client.Do(req)
++	if err != nil {
++		return err
++	}
++	resp.Body.Close()
++	return nil
++}
++
+ func (c *Client) Ping(ctx context.Context) error {
+ 	reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1/status", c.port)
+ 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+diff --git a/mlxrunner/owner.go b/mlxrunner/owner.go
+new file mode 100644
+index 00000000..055fc56e
+--- /dev/null
++++ b/mlxrunner/owner.go
+@@ -0,0 +1,72 @@
++package mlxrunner
++
++import (
++	"encoding/json"
++	"net/http"
++	"os"
++	"sync/atomic"
++	"time"
++)
++
++// priorityOn is OLLAMA_PRIORITY=1. While a request with options.priority > 0
++// runs anywhere on this Ollama server, every MLX runner stops stepping the
++// prompt reading and generation of requests without it. Their state stays in
++// memory and they continue when the priority requests end. One background
++// stream cost the owner 22% of writing speed without it (M5 Ultra, 2026-11-27).
++var priorityOn = os.Getenv("OLLAMA_PRIORITY") == "1"
++
++// ownerLeaseUntil (unix ns) and ownerLeaseTier are set by the server through
++// POST /v1/owner while a priority request runs in any runner. A lease, so a
++// lost "end" message or a server crash cannot pause work for more than a few
++// seconds.
++var (
++	ownerLeaseUntil atomic.Int64
++	ownerLeaseTier  atomic.Int32
++)
++
++func ownerRemoteTier() int {
++	if time.Now().UnixNano() < ownerLeaseUntil.Load() {
++		return int(ownerLeaseTier.Load())
++	}
++	return 0
++}
++
++func ownerHandler(w http.ResponseWriter, r *http.Request) {
++	var body struct {
++		Seconds float64 `json:"seconds"`
++		Tier    int     `json:"tier"`
++	}
++	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
++		http.Error(w, err.Error(), http.StatusBadRequest)
++		return
++	}
++	if body.Seconds <= 0 || body.Tier <= 0 {
++		ownerLeaseUntil.Store(0)
++	} else {
++		ownerLeaseTier.Store(int32(body.Tier))
++		ownerLeaseUntil.Store(time.Now().Add(time.Duration(body.Seconds * float64(time.Second))).UnixNano())
++	}
++	w.WriteHeader(http.StatusNoContent)
++}
++
++func (slot *batchSlot) tier() int {
++	if slot == nil || slot.request == nil {
++		return 0
++	}
++	return slot.request.request.Options.Priority
++}
++
++// topTier is the highest priority tier running now, here or in another
++// runner; requests below it wait this round. 0 = nobody waits.
++func (s *batchScheduler) topTier() int {
++	if !priorityOn {
++		return 0
++	}
++	top := ownerRemoteTier()
++	for _, slot := range s.slots {
++		if slot != nil && slot.request != nil && !slot.request.finished {
++			top = max(top, slot.tier())
++		}
++	}
++	return top
++}
+diff --git a/mlxrunner/scheduler.go b/mlxrunner/scheduler.go
+index c830e613..73f9b492 100644
+--- a/mlxrunner/scheduler.go
++++ b/mlxrunner/scheduler.go
+@@ -628,6 +628,7 @@ func (s *batchScheduler) step() bool {
+ 			}
+ 		}
+ 	}
++	top := s.topTier()
+ 	// At most one generation prompt chunk or scoring/embedding forward per decode round.
+ 	// Rotate across both kinds so neither can starve the other.
+ 	for n := range len(s.slots) {
+@@ -653,6 +654,9 @@ func (s *batchScheduler) step() bool {
+ 		if slot == nil || slot.request == nil || slot.request.finished || slot.request.prefill == nil {
+ 			continue
+ 		}
++		if slot.tier() < top {
++			continue
++		}
+ 		req := slot.request
+ 		s.drafting.reset()
+ 		before := req.prefill.processed
+@@ -711,6 +715,9 @@ func (s *batchScheduler) step() bool {
+ 			continue
+ 		}
+ 		active++
++		if slot.tier() < top {
++			continue
++		}
+ 		if slot.request.prefill == nil && slot.request.restore == nil && len(slot.request.responses) == 0 {
+ 			ready = append(ready, slot)
+ 		}
+diff --git a/mlxrunner/server.go b/mlxrunner/server.go
+index 1e1c440f..a3488fa9 100644
+--- a/mlxrunner/server.go
++++ b/mlxrunner/server.go
+@@ -273,6 +273,7 @@ func run(runnerCtx context.Context, modelName string, port int) error {
+ 	})
+ 
+ 	mux.HandleFunc("POST /v1/embeddings", runner.handleEmbed)
++	mux.HandleFunc("POST /v1/owner", ownerHandler)
+ 	mux.HandleFunc("POST /v1/audio/speech", runner.speechHandler)
+ 
+ 	for source, target := range map[string]string{
+diff --git a/server/owner.go b/server/owner.go
+new file mode 100644
+index 00000000..c8ce8b49
+--- /dev/null
++++ b/server/owner.go
+@@ -0,0 +1,147 @@
++package server
++
++import (
++	"context"
++	"crypto/subtle"
++	"log/slog"
++	"os"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/ollama/ollama/api"
++)
++
++// OLLAMA_PRIORITY=1: while a chat request with an honored options.priority
++// (1 = chat, 2 = voice) runs, the server keeps a short lease on every loaded
++// MLX runner, and those runners pause requests of a lower tier
++// (mlxrunner/owner.go). A tier is honored only when options.priority_key
++// equals the key in OLLAMA_PRIORITY_KEY_FILE, so a tailnet caller cannot raise
++// its own tier.
++var priorityOn = os.Getenv("OLLAMA_PRIORITY") == "1"
++
++var priorityKey = func() string {
++	if f := os.Getenv("OLLAMA_PRIORITY_KEY_FILE"); f != "" {
++		if b, err := os.ReadFile(f); err == nil {
++			return strings.TrimSpace(string(b))
++		}
++		slog.Warn("priority key file unreadable; priority off", "file", f)
++	}
++	return ""
++}()
++
++const (
++	ownerLeaseSeconds = 3
++	maxPriorityTier   = 2
++)
++
++// honorPriority keeps opts.Priority only with the right key, then drops the
++// key so it never reaches a runner or a log.
++func honorPriority(opts *api.Options) int {
++	if opts == nil {
++		return 0
++	}
++	tier, key := opts.Priority, opts.PriorityKey
++	opts.Priority, opts.PriorityKey = 0, ""
++	if opts.PriorityKey == "" && key == "" && tier == 0 {
++		return 0
++	}
++	if !priorityOn || tier <= 0 || priorityKey == "" ||
++		subtle.ConstantTimeCompare([]byte(key), []byte(priorityKey)) != 1 {
++		return 0
++	}
++	tier = min(tier, maxPriorityTier)
++	opts.Priority = tier
++	return tier
++}
++
++type ownerLeaseSetter interface {
++	SetOwnerLease(ctx context.Context, seconds float64, tier int) error
++}
++
++var owner struct {
++	mu     sync.Mutex
++	counts [maxPriorityTier + 1]int
++	once   sync.Once
++	wake   chan struct{}
++	held   int
++}
++
++func ownerTop() int {
++	owner.mu.Lock()
++	defer owner.mu.Unlock()
++	for t := maxPriorityTier; t > 0; t-- {
++		if owner.counts[t] > 0 {
++			return t
++		}
++	}
++	return 0
++}
++
++func (s *Server) ownerBegin(tier int) {
++	owner.once.Do(func() {
++		owner.wake = make(chan struct{}, 1)
++		go s.ownerLoop()
++	})
++	owner.mu.Lock()
++	owner.counts[tier]++
++	owner.mu.Unlock()
++	s.ownerNudge()
++}
++
++func (s *Server) ownerEnd(tier int) {
++	owner.mu.Lock()
++	owner.counts[tier]--
++	owner.mu.Unlock()
++	s.ownerNudge()
++}
++
++func (s *Server) ownerNudge() {
++	select {
++	case owner.wake <- struct{}{}:
++	default:
++	}
++}
++
++func (s *Server) ownerLoop() {
++	t := time.NewTicker(time.Second)
++	defer t.Stop()
++	for {
++		select {
++		case <-t.C:
++		case <-owner.wake:
++		}
++		top := ownerTop()
++		if top == 0 && owner.held == 0 {
++			continue
++		}
++		seconds := 0.0
++		if top > 0 {
++			seconds = ownerLeaseSeconds
++		}
++		s.ownerBroadcast(seconds, top)
++		owner.held = top
++	}
++}
++
++func (s *Server) ownerBroadcast(seconds float64, tier int) {
++	if s.sched == nil {
++		return
++	}
++	s.sched.loadedMu.Lock()
++	var targets []ownerLeaseSetter
++	for _, ref := range s.sched.loaded {
++		if ref == nil {
++			continue
++		}
++		if o, ok := ref.llama.(ownerLeaseSetter); ok {
++			targets = append(targets, o)
++		}
++	}
++	s.sched.loadedMu.Unlock()
++	for _, o := range targets {
++		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
++		_ = o.SetOwnerLease(ctx, seconds, tier)
++		cancel()
++	}
++}
+diff --git a/server/routes.go b/server/routes.go
+index f9dfc341..59ef0ee2 100644
+--- a/server/routes.go
++++ b/server/routes.go
+@@ -279,6 +279,9 @@ func (s *Server) scheduleRunnerForModel(ctx context.Context, m *Model, caps []mo
+ 	embeddingBatchDefault := shouldApplyEmbeddingBatchDefault(m, requestOpts)
+ 	numBatchAuto := usesAutomaticNumBatch(m, requestOpts) && !embeddingBatchDefault
+ 	opts, err := s.modelOptionsWithEmbeddingBatchDefault(m, requestOpts, embeddingBatchDefault)
++	if err == nil {
++		honorPriority(&opts) // every path: a tier only with the key
++	}
+ 	if err != nil {
+ 		return nil, nil, nil, err
+ 	}
+@@ -3345,6 +3348,10 @@ func (s *Server) ChatHandler(c *gin.Context) {
+ 
+ 		var parserErr error
+ 
++		if tier := opts.Priority; tier > 0 {
++			s.ownerBegin(tier)
++			defer s.ownerEnd(tier)
++		}
+ 		rm := newRequestMetrics(c.Request.UserAgent(), req.Model, opts != nil && opts.NoCachePersist, checkpointStart, len(req.Tools) > 0)
+ 		defer rm.log()
+ 		err := r.Completion(ctx, llm.CompletionRequest{
+-- 
+2.54.0 (Apple Git-157)
+
+From 0002c1ad88312d83c011decae14fb61f1bdba4df Mon Sep 17 00:00:00 2001
+From: piargus <piargus@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 14:31:03 -0500
+Subject: [PATCH 4/4] request metrics: log the honored tier
+
+---
+ server/request_metrics.go | 3 ++-
+ server/routes.go          | 3 +++
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/server/request_metrics.go b/server/request_metrics.go
+index e2003f01..dc3ae01a 100644
+--- a/server/request_metrics.go
++++ b/server/request_metrics.go
+@@ -18,6 +18,7 @@ type requestMetrics struct {
+ 	client, model string
+ 	private       bool
+ 	tools         bool
++	tier          int
+ 	start         time.Time
+ 	firstToken    time.Time
+ 	firstAnswer   time.Time
+@@ -81,7 +82,7 @@ func (m *requestMetrics) log() {
+ 	if f.PromptEvalCachedCount != nil {
+ 		cached = *f.PromptEvalCachedCount
+ 	}
+-	slog.Info("request metrics", "client", m.client, "model", m.model, "temporary", m.private, "tools", m.tools,
++	slog.Info("request metrics", "client", m.client, "model", m.model, "temporary", m.private, "tier", m.tier, "tools", m.tools,
+ 		"prompt_tokens", f.PromptEvalCount, "cached_tokens", cached,
+ 		"prompt_ms", f.PromptEvalDuration.Milliseconds(), "eval_tokens", f.EvalCount, "eval_ms", f.EvalDuration.Milliseconds(),
+ 		"think_chunks", m.thinkChunks, "answer_chunks", m.answerChunks, "tool_calls", m.toolCalls,
+diff --git a/server/routes.go b/server/routes.go
+index 59ef0ee2..4a3ae099 100644
+--- a/server/routes.go
++++ b/server/routes.go
+@@ -3353,6 +3353,9 @@ func (s *Server) ChatHandler(c *gin.Context) {
+ 			defer s.ownerEnd(tier)
+ 		}
+ 		rm := newRequestMetrics(c.Request.UserAgent(), req.Model, opts != nil && opts.NoCachePersist, checkpointStart, len(req.Tools) > 0)
++		if opts != nil {
++			rm.tier = opts.Priority
++		}
+ 		defer rm.log()
+ 		err := r.Completion(ctx, llm.CompletionRequest{
+ 			Prompt:          prompt,
+-- 
+2.54.0 (Apple Git-157)
+

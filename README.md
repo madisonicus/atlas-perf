@@ -15,6 +15,7 @@ real models, and offer what works upstream.
 | First word on a chat follow-up (10k–70k tokens) | 0.7–4.2 s | **0.12–0.25 s** | turn-start snapshots (patch 0006) |
 | First word on a follow-up at 139k tokens | 12.5 s | **0.46 s** | same |
 | Total speed, 8 chats at once | 168 tok/s | **265 tok/s (+58%)** | upstream PR #19769 |
+| Owner writing speed with 3 background streams | 49 tok/s | **100 tok/s** (idle 98.6) | priority tiers (patch 0010) |
 | First word after a model unload or restart (21k chat) | 13.9 s | **1.4 s** | upstream PR #19745 + write-back delay (patch 0007) |
 
 Also measured: Gemma 4 31B +14% and Qwen3.6 35B-A3B +22% from the same
@@ -121,6 +122,7 @@ and chat.
 | 2026-11-27 | Production check: int4u + DFlash2 on prod Ollama (patched, stock MLX libraries), 3 runs per kind | **128.6 tok/s avg (+29%)**: prose 107.8, code 189.6, chat 88.3 (medians) | higher than the test server's 117 (MLX 0.32.5 there; code 190 vs 167). Only 3 runs, and the test-server gap is not explained yet |
 | 2026-11-27 | Draft acceptance by position (`OLLAMA_MLX_ALT_STATS=1`, 6 varied prompts per kind, 1 slot): rate at position k given positions 1..k-1 were accepted | DFlash2 prose 0.73, 0.65, 0.59, 0.54, 0.62, 0.38, 0.52; chat 0.72, 0.62, 0.58, 0.63, 0.60, 0.58, 0.50; code 0.90, 0.84, 0.81, 0.84, 0.75, 0.82, 0.83. MTP prose 0.76, 0.64, 0.57; chat 0.77, 0.66 (its controller stops at depth ~2 there) | no collapse after position 1: each position is accepted ~60–75% of the time on prose and chat. At that rate even an endless free draft gives at most ~p/(1-p) ≈ 2.3 accepted tokens, ~3.3 per round with the free one; +50% needs ~3.8. **So +50% decode on prose and chat is out of reach with these drafts**, at any kernel speed. Only a draft that is right ≥80% per token, or a relaxed accept rule, can reach it |
 | 2026-11-27 | Owner latency during batch work (`bench/qos.py`): one streamed 400-token chat while N background chats run, int4u + DFlash2, temperature 0.7, median of 4 | idle 98.6 tok/s, first word 0.07 s. **1 background: 76.5 (−22%)**; 3: 48.7 (−51%), 0.14 s; 7 (8 slots): 33.7 (−66%), 0.22 s | the goal "owner within 15% of idle during batch jobs" fails with one background stream already. Fair sharing cannot meet it; the owner's request needs priority (pause batch streams while it runs). Next patch |
+| 2026-11-27 | **Priority tiers** (patch 0010, `OLLAMA_PRIORITY=1`): options.priority 0 batch, 1 chat, 2 voice; while a higher tier runs, every MLX runner pauses lower tiers (a 3 s lease from the server, renewed each second). A tier counts only with `priority_key` equal to a key file. `bench/qos.py`, 3 background streams, median of 3–4 | owner chat, same model: **49 → 100 tok/s** (idle 98.6); background on another model (Qwen3.6 35B-A3B): **70 → 96**; voice tier over 3 chat-tier streams: 96.8; wrong or no key: 49–55 (no priority) | meets "owner within 15% of idle during batch work" for MLX models. Open WebUI sends tier 1 through a global filter. Not covered: llama.cpp models, and a request that waits for a free slot. In production |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
@@ -193,6 +195,9 @@ and 0008.
    the disk cache once it is idle, not after every turn. In production (10m).
 8. **`no_cache_persist`** request option: keep a request out of the disk
    cache. Open WebUI's Temporary Chats send it. In production.
+9. **`OLLAMA_REQUEST_METRICS=1`**: one numbers-only log line per chat request
+   (tokens, times, client, tier, temporary or not). In production.
+10. **`OLLAMA_PRIORITY=1`** + `OLLAMA_PRIORITY_KEY_FILE`: priority tiers. In production.
 
 Built Go-only on the Mac (`go build`), with the MLX libraries of the shipped
 Ollama next to the binary. No Xcode needed. To try MLX 0.32.5, copy
