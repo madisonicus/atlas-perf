@@ -89,6 +89,7 @@ and chat.
 | 2026-11-27 | Qwen3.6 35B-A3B int4, a real vision job: 44 hand-labeled wildlife photos, keywords from a fixed list | F1 0.849 vs 0.874 official (precision 0.853 vs 0.895, species recall 0.972 vs 0.944); 1.12 vs 1.21 s per photo | small quality loss and only 7% faster: per-photo time is mostly image prefill, not decode. Not worth it for this job |
 | 2026-11-27 | Voice-style mode: ~700-token system prompt, short spoken-style questions, thinking off, streaming, 12 runs | first word 140 ms official vs 169 ms best stack; whole short answer 371 vs 330 ms | the draft adds ~30 ms before the first word but finishes 11% sooner; both far below speech-synthesis time, so voice is not limited by the LLM here |
 | 2026-11-27 | Prompt reading (time to first word), Qwen3.8 27B, 8k and 30k prompts, 3 interleaved runs | uniform int4 1,738 / 1,553 tok/s vs official nvfp4 1,565 / 1,415 (**+11% / +10%**); MLX 0.32.5 vs stock: no difference | uniform int4 also cuts time to first word by about 9% |
+| 2026-11-27 | Prefill chunk size (patched `OLLAMA_MLX_PREFILL_CHUNK`; Ollama fixes 2048), uniform int4, pairwise vs default | 1024: 1,728 / 1,557; 4096: 1,738 / 1,565; 8192: 1,729 / 1,544 tok/s at 8k / 30k, all within 1% of 2048 | no effect on the dense model (the MLX counterpart of llama.cpp's `--ubatch-size`) |
 
 ## Model matrix (2026-11-27, idle atlas, Ollama 0.40.18)
 
