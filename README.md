@@ -17,11 +17,17 @@ real models, and offer what works upstream.
 | Total speed, 8 chats at once | 168 tok/s | **265 tok/s (+58%)** | upstream PR #19769 |
 | Owner writing speed with 3 background streams | 49 tok/s | **100 tok/s** (idle 98.6) | priority tiers (patch 0010) |
 | First word after a model unload or restart (21k chat) | 13.9 s | **1.4 s** | upstream PR #19745 + write-back delay (patch 0007) |
+| First word in a new chat (6.4k-token system prompt seen before) | 3.7 s | **0.2 s** | turn-start snapshots (patch 0006) |
 
 Also measured: Gemma 4 31B +14% and Qwen3.6 35B-A3B +22% from the same
 uniform 4-bit lever. Not reached: +50% single-stream decode on prose and
-chat; the draft is accepted for only ~1.5 tokens per round there (see the
-results log).
+chat. Each drafted token is accepted 60–75% of the time there, which caps a
+round near 3.3 tokens; +50% needs about 3.8 (see the results log and the
+[skeptical review](reviews/2026-11-27-skeptical-review.md)).
+
+Upstream: the turn-start snapshot fix is filed as
+[ollama#19952](https://github.com/ollama/ollama/issues/19952), with a PR
+branch ready. Progress posts: [2026-11-27, day one](posts/2026-11-27-day-one.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/models-dark.svg">
