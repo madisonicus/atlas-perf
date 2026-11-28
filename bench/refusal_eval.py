@@ -16,6 +16,7 @@ Generation: greedy, thinking off, up to --max-tokens new tokens.
 
 from __future__ import annotations
 
+import os
 import argparse
 import csv
 import json
@@ -61,7 +62,7 @@ def gen_ollama(model: str, prompts: list[str], max_tokens: int, host: str) -> tu
     for p in prompts:
         body = {"model": model, "stream": False, "think": False,
                 "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": p}],
-                "options": {"temperature": 0, "num_predict": max_tokens}}
+                "options": {"temperature": 0, "num_predict": max_tokens, "num_ctx": int(os.environ.get("NUM_CTX", "16384"))}}
         req = urllib.request.Request(f"{host}/api/chat", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=600) as r:

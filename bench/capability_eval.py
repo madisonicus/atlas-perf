@@ -12,6 +12,7 @@ unprivileged user.
 
 from __future__ import annotations
 
+import os
 import argparse
 import json
 import re
@@ -38,7 +39,7 @@ def load(spec):
 def chat(host, model, prompt, max_tokens):
     body = {"model": model, "stream": False, "think": False,
             "messages": [{"role": "user", "content": prompt}],
-            "options": {"temperature": 0, "num_predict": max_tokens, "num_ctx": 16384}}
+            "options": {"temperature": 0, "num_predict": max_tokens, "num_ctx": int(os.environ.get("NUM_CTX", "16384"))}}
     req = urllib.request.Request(f"{host}/api/chat", data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=900) as r:

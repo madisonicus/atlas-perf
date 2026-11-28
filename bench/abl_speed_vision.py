@@ -8,6 +8,7 @@ per model with its start and end time, so the server log's speculative
 decode stats can be matched to it. Models whose name ends in '!' are
 unloaded after the test.
 """
+import os
 import base64
 import json
 import statistics
@@ -34,7 +35,7 @@ def chat(model, content, images=None, n=400):
     if images:
         msg["images"] = images
     return post("/api/chat", {"model": model, "stream": False, "think": False, "messages": [msg],
-                              "options": {"num_predict": n, "temperature": 0, "num_ctx": 16384}})
+                              "options": {"num_predict": n, "temperature": 0, "num_ctx": int(os.environ.get("NUM_CTX", "16384"))}})
 
 
 def main():
