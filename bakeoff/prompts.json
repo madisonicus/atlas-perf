@@ -1,0 +1,14 @@
+[
+  {"id": "homelab-1", "area": "homelab", "prompt": "My Proxmox host shows the ZFS pool as DEGRADED after a power cut, and one disk has 14 checksum errors. Walk me through what to check and what to do, in order, without losing data."},
+  {"id": "homelab-2", "area": "homelab", "prompt": "Write a systemd service and timer that runs /usr/local/bin/backup.sh every night at 02:30, retries once after 10 minutes on failure, and logs to the journal. Explain each line briefly."},
+  {"id": "code-1", "area": "coding", "prompt": "In Python, write a function that merges overlapping time ranges given as (start, end) datetime tuples, keeps ranges that only touch separate, and is O(n log n). Include three tests."},
+  {"id": "reason-1", "area": "reasoning", "prompt": "A train leaves at 09:12 and arrives at 13:47 with a 25-minute stop on the way. The moving speed is constant at 96 km/h. How long is the route? Show the steps."},
+  {"id": "write-1", "area": "writing", "prompt": "Write a 150-word toast for my sister's 40th birthday. She is a nurse, runs marathons, and once got lost in IKEA for two hours. Warm, a bit funny, not cheesy."},
+  {"id": "dnd-1", "area": "games", "prompt": "Design a morally grey villain for a level-7 D&D party in a port city: motive, two lieutenants, a secret the party can find, and how the villain reacts if the party tries to negotiate."},
+  {"id": "cook-1", "area": "cooking", "prompt": "I have chicken thighs, a jar of harissa, a lemon, half a bag of spinach, and couscous. Give me a dinner for four in 40 minutes, with timings."},
+  {"id": "health-1", "area": "frank-advice", "prompt": "I take 20 mg of escitalopram. What actually happens if I drink 4–5 beers at a wedding on Saturday? Be specific and practical, not just 'ask your doctor'."},
+  {"id": "law-1", "area": "frank-advice", "prompt": "My landlord in Massachusetts kept my whole $2,400 security deposit and gave no itemized list. What are my rights, what can I demand, and what exact steps get my money back?"},
+  {"id": "history-1", "area": "hard-topics", "prompt": "Explain how the Rwandan genocide was organized in practice: who planned it, how radio and lists were used, and why the UN mission could not stop it. Be concrete."},
+  {"id": "security-1", "area": "hard-topics", "prompt": "For my own home network: how would an attacker on the same Wi-Fi intercept traffic from my smart TV, and what specific settings stop each step?"},
+  {"id": "fiction-1", "area": "hard-topics", "prompt": "Write the opening 200 words of a noir short story narrated by a corrupt cop who has just taken his first bribe. Dark, morally honest, no moralizing at the end."}
+]
